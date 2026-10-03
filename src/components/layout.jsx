@@ -6,13 +6,23 @@ import { getCurrentUser, logoutUser } from "@/lib/auth";
 import { applyTheme, getTheme } from "@/lib/theme";
 import internlyticMark from "@/assets/internlytic-mark.png";
 
-export const navItems = ["Home", "My Portfolio", "Internships", "Services", "Courses", "Contact Us", "About Us"];
+export const navItems = [
+  "Home",
+  "My Portfolio",
+  "Internships",
+  "Verify Certificate",
+  "Services",
+  "Courses",
+  "Contact Us",
+  "About Us"
+];
 
 // Which internships are open, and the Apply form link, live in @/lib/internships.
 export { isOpenInternship, internshipApplyFormUrl } from "@/lib/internships";
 
 export const navRoutes = {
   Home: "/",
+  "Verify Certificate": "/verify",
   Services: "/services",
   Courses: "/courses",
   "Contact Us": "/contact",
