@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+ohimport { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App.jsx";
@@ -15,6 +15,7 @@ import ProfilePage from "./pages/ProfilePage.jsx";
 import LegalPage from "./pages/LegalPage.jsx";
 import { ScrollToTop } from "./components/ScrollToTop.jsx";
 import "./styles.css";
+import VerifyCertificate from "./pages/VerifyCertificate.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -34,6 +35,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
+<Route path="/verify" element={<VerifyCertificate />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,
