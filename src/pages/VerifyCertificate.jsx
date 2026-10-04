@@ -6,12 +6,10 @@ export default function VerifyCertificate() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleVerify(e) {
-    e.preventDefault();
+  async function verifyCertificate(id) {
+    const cleanId = id.trim().toUpperCase();
 
-    const id = certificateId.trim().toUpperCase();
-
-    if (!id) {
+    if (!cleanId) {
       setResult({
         valid: false,
         message: "Please enter a certificate ID.",
@@ -25,7 +23,7 @@ export default function VerifyCertificate() {
     const { data, error } = await supabase
       .from("certificates")
       .select("*")
-      .eq("certificate_id", id)
+      .eq("certificate_id", cleanId)
       .maybeSingle();
 
     setLoading(false);
@@ -59,6 +57,24 @@ export default function VerifyCertificate() {
       issueDate: data.issue_date,
       status: data.status || "VALID",
     });
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const qrCertificateId = params.get("certificate");
+
+    if (qrCertificateId) {
+      const id = qrCertificateId.trim().toUpperCase();
+
+      setCertificateId(id);
+      verifyCertificate(id);
+    }
+  }, []);
+
+  async function handleVerify(e) {
+    e.preventDefault();
+
+    await verifyCertificate(certificateId);
   }
 
   return (
