@@ -218,4 +218,4 @@ export default function VerifyCertificate() {
       </div>
     </main>
   );
-        }
+}
