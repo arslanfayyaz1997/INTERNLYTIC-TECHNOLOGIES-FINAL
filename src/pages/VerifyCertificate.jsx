@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import CertificateQR from "../components/CertificateQR.jsx";
 
 
 export default function VerifyCertificate() {
@@ -210,7 +211,8 @@ Verify Certificate
               }}  
             >  
               STATUS: {result.status}  
-            </p>  
+            </p> 
+            <CertificateQR certificateId={result.certificateId} />
           </>  
         ) : (  
           <>  
