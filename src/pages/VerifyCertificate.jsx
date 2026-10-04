@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { supabase } from "../supabaseClient";
 
 export default function VerifyCertificate() {
   const [certificateId, setCertificateId] = useState("");
   const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  function handleVerify(e) {
+  async function handleVerify(e) {
     e.preventDefault();
 
     const id = certificateId.trim().toUpperCase();
@@ -17,22 +19,46 @@ export default function VerifyCertificate() {
       return;
     }
 
-    if (id === "INTL-2026-000001") {
+    setLoading(true);
+    setResult(null);
+
+    const { data, error } = await supabase
+      .from("certificates")
+      .select("*")
+      .eq("certificate_id", id)
+      .maybeSingle();
+
+    setLoading(false);
+
+    if (error) {
+      console.error("Certificate verification error:", error);
+
       setResult({
-        valid: true,
-        name: "Test Certificate Holder",
-        program: "Machine Learning & Generative AI Internship",
-        certificateId: id,
-        issueDate: "30 August 2026",
-        status: "VALID",
+        valid: false,
+        message: "Unable to verify certificate right now. Please try again.",
       });
-    } else {
+
+      return;
+    }
+
+    if (!data) {
       setResult({
         valid: false,
         message:
           "No certificate was found with this ID. Please check the Certificate ID.",
       });
+
+      return;
     }
+
+    setResult({
+      valid: true,
+      name: data.name,
+      program: data.program,
+      certificateId: data.certificate_id,
+      issueDate: data.issue_date,
+      status: data.status || "VALID",
+    });
   }
 
   return (
@@ -97,6 +123,7 @@ export default function VerifyCertificate() {
 
           <button
             type="submit"
+            disabled={loading}
             style={{
               padding: "15px 25px",
               border: "none",
@@ -105,10 +132,11 @@ export default function VerifyCertificate() {
               color: "#ffffff",
               fontSize: "16px",
               fontWeight: "700",
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.7 : 1,
             }}
           >
-            Verify
+            {loading ? "Verifying..." : "Verify"}
           </button>
         </form>
 
@@ -190,4 +218,4 @@ export default function VerifyCertificate() {
       </div>
     </main>
   );
-}
+        }
