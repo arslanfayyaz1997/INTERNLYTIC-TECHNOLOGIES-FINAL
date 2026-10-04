@@ -73,5 +73,6 @@
     "playwright": "^1.63.0",
     "tailwindcss": "^4.2.1",
     "vite": "^6.0.0"
+    "@supabase/supabase-js": "^2.57.0",
   }
 }
