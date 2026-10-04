@@ -73,9 +73,21 @@ export default function VerifyCertificate() {
 
   async function handleVerify(e) {
     e.preventDefault();
-
     await verifyCertificate(certificateId);
   }
+
+  const verificationUrl =
+    result?.valid && typeof window !== "undefined"
+      ? `${window.location.origin}/verify?certificate=${encodeURIComponent(
+          result.certificateId
+        )}`
+      : "";
+
+  const qrUrl = verificationUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+        verificationUrl
+      )}`
+    : "";
 
   return (
     <main
@@ -186,52 +198,4 @@ export default function VerifyCertificate() {
                 </p>
 
                 <p style={{ marginTop: "8px" }}>
-                  <strong>Certificate ID:</strong> {result.certificateId}
-                </p>
-
-                <p style={{ marginTop: "8px" }}>
-                  <strong>Program:</strong> {result.program}
-                </p>
-
-                <p style={{ marginTop: "8px" }}>
-                  <strong>Issue Date:</strong> {result.issueDate}
-                </p>
-
-                <p
-                  style={{
-                    marginTop: "15px",
-                    color: "#15803d",
-                    fontWeight: "800",
-                  }}
-                >
-                  STATUS: {result.status}
-                </p>
-              </>
-            ) : (
-              <>
-                <h2
-                  style={{
-                    color: "#b91c1c",
-                    fontSize: "22px",
-                    fontWeight: "800",
-                  }}
-                >
-                  ✕ Certificate Not Found
-                </h2>
-
-                <p
-                  style={{
-                    marginTop: "10px",
-                    color: "#b91c1c",
-                  }}
-                >
-                  {result.message}
-                </p>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
+                  <strong>Certificate ID:</
