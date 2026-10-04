@@ -53,7 +53,7 @@ export default function VerifyCertificate() {
 
     setResult({
       valid: true,
-      name: data.name,
+      name: data.Arslan,
       program: data.program,
       certificateId: data.certificate_id,
       issueDate: data.issue_date,
