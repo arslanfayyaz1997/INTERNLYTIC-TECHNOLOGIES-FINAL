@@ -1,4 +1,4 @@
-Import { useState } from "react";
+import { useState } from "react";
 import { supabase } from "../supabaseClient";
 
 export default function VerifyCertificate() {
@@ -53,7 +53,7 @@ export default function VerifyCertificate() {
 
     setResult({
       valid: true,
-      name: data.name,
+      name: data.student_name,
       program: data.program,
       certificateId: data.certificate_id,
       issueDate: data.issue_date,
