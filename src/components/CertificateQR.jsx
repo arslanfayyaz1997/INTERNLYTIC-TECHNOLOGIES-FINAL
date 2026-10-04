@@ -1,13 +1,9 @@
 export default function CertificateQR({ certificateId }) {
   if (!certificateId) return null;
 
-  const verificationUrl = `${window.location.origin}/verify?certificate=${encodeURIComponent(
-    certificateId
-  )}`;
-
-  const qrUrl = `https://quickchart.io/qr?text=${encodeURIComponent(
-    verificationUrl
-  )}&size=220`;
+  const verificationUrl =
+    `${window.location.origin}/verify?certificate=` +
+    encodeURIComponent(certificateId);
 
   return (
     <div
@@ -16,19 +12,22 @@ export default function CertificateQR({ certificateId }) {
         textAlign: "center",
       }}
     >
-      <img
-        src={qrUrl}
-        alt={`QR Code for certificate ${certificateId}`}
-        width="220"
-        height="220"
+      <a
+        href={verificationUrl}
+        target="_blank"
+        rel="noopener noreferrer"
         style={{
-          display: "block",
-          margin: "0 auto",
-          background: "#ffffff",
-          padding: "10px",
-          borderRadius: "12px",
+          display: "inline-block",
+          padding: "14px 20px",
+          background: "#0284c7",
+          color: "#ffffff",
+          borderRadius: "10px",
+          textDecoration: "none",
+          fontWeight: "700",
         }}
-      />
+      >
+        Open Certificate Verification
+      </a>
 
       <p
         style={{
@@ -37,7 +36,7 @@ export default function CertificateQR({ certificateId }) {
           color: "#6b7280",
         }}
       >
-        Scan this QR code to verify this certificate
+        Certificate ID: {certificateId}
       </p>
     </div>
   );
