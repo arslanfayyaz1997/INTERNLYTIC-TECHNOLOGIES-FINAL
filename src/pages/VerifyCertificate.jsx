@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "../supabaseClient";
 
 export default function VerifyCertificate() {
@@ -61,13 +60,6 @@ export default function VerifyCertificate() {
       status: data.status || "VALID",
     });
   }
-
-  const verificationUrl =
-    result?.valid && typeof window !== "undefined"
-      ? `${window.location.origin}/verify?certificate=${encodeURIComponent(
-          result.certificateId
-        )}`
-      : "";
 
   return (
     <main
@@ -204,53 +196,6 @@ export default function VerifyCertificate() {
                     }}
                   >
                     STATUS: {result.status}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: "30px",
-                    paddingTop: "25px",
-                    borderTop: "1px solid #d1d5db",
-                    textAlign: "center",
-                  }}
-                >
-                  <h3
-                    style={{
-                      color: "#111827",
-                      fontSize: "20px",
-                      fontWeight: "800",
-                      marginBottom: "15px",
-                    }}
-                  >
-                    Scan to Verify
-                  </h3>
-
-                  <div
-                    style={{
-                      display: "inline-block",
-                      padding: "15px",
-                      background: "#ffffff",
-                      borderRadius: "12px",
-                      border: "1px solid #e5e7eb",
-                    }}
-                  >
-                    <QRCodeSVG
-                      value={verificationUrl}
-                      size={200}
-                      level="H"
-                      includeMargin={true}
-                    />
-                  </div>
-
-                  <p
-                    style={{
-                      marginTop: "12px",
-                      fontSize: "14px",
-                      color: "#6b7280",
-                    }}
-                  >
-                    Scan this QR code to verify this certificate online.
                   </p>
                 </div>
               </>
