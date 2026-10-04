@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
+import CertificateQR from "../components/CertificateQR.jsx";
 
 export default function VerifyCertificate() {
 const [certificateId, setCertificateId] = useState("");
@@ -114,6 +115,7 @@ Verify Certificate
     >  
       Internlytic Technologies Certificate Verification  
     </p>  
+  <CertificateQR certificateId={result.certificateId} />
 
     <form  
       onSubmit={handleVerify}  
