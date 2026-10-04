@@ -1,4 +1,4 @@
-import { useState } from "react";
+Import { useState } from "react";
 import { supabase } from "../supabaseClient";
 
 export default function VerifyCertificate() {
@@ -53,7 +53,7 @@ export default function VerifyCertificate() {
 
     setResult({
       valid: true,
-      name: data.student_name,
+      name: data.name,
       program: data.program,
       certificateId: data.certificate_id,
       issueDate: data.issue_date,
@@ -165,39 +165,31 @@ export default function VerifyCertificate() {
                   ✓ Certificate Verified
                 </h2>
 
-                <div
+                <p style={{ marginTop: "15px" }}>
+                  <strong>Certificate Holder:</strong> {result.name}
+                </p>
+
+                <p style={{ marginTop: "8px" }}>
+                  <strong>Certificate ID:</strong> {result.certificateId}
+                </p>
+
+                <p style={{ marginTop: "8px" }}>
+                  <strong>Program:</strong> {result.program}
+                </p>
+
+                <p style={{ marginTop: "8px" }}>
+                  <strong>Issue Date:</strong> {result.issueDate}
+                </p>
+
+                <p
                   style={{
-                    marginTop: "20px",
-                    color: "#111827",
-                    fontSize: "18px",
-                    lineHeight: "1.8",
+                    marginTop: "15px",
+                    color: "#15803d",
+                    fontWeight: "800",
                   }}
                 >
-                  <p>
-                    <strong>Certificate Holder:</strong> {result.name}
-                  </p>
-
-                  <p>
-                    <strong>Certificate ID:</strong> {result.certificateId}
-                  </p>
-
-                  <p>
-                    <strong>Program:</strong> {result.program}
-                  </p>
-
-                  <p>
-                    <strong>Issue Date:</strong> {result.issueDate}
-                  </p>
-
-                  <p
-                    style={{
-                      color: "#15803d",
-                      fontWeight: "800",
-                    }}
-                  >
-                    STATUS: {result.status}
-                  </p>
-                </div>
+                  STATUS: {result.status}
+                </p>
               </>
             ) : (
               <>
