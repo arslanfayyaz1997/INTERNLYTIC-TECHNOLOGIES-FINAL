@@ -37,7 +37,6 @@ export default function VerifyCertificate() {
 
       if (error) {
         console.error("Document verification error:", error);
-
         setResult({
           valid: false,
           message: "Unable to verify right now. Please try again.",
@@ -61,19 +60,27 @@ export default function VerifyCertificate() {
       const offerLetterStatus =
         data.offer_letter_status || "not issued";
 
+      // Correct date column for each document
+      const issueDate =
+        type === "offer"
+          ? data.offer_letter_issue_date || null
+          : data.certificate_issue_date || null;
+
       setResult({
         valid: true,
         documentType: type,
         name: data.student_name || "Not available",
-        program: data.program || "Not available",
+        program:
+          data.program ||
+          data.internship_program ||
+          "Not available",
         certificateId: data.certificate_id,
-        issueDate: data.issue_date || null,
-        certificateStatus: certificateStatus,
-        offerLetterStatus: offerLetterStatus,
+        issueDate,
+        certificateStatus,
+        offerLetterStatus,
       });
     } catch (error) {
       console.error("Verification error:", error);
-
       setResult({
         valid: false,
         message: "Something went wrong. Please try again.",
@@ -89,7 +96,6 @@ export default function VerifyCertificate() {
 
     if (qrCertificateId) {
       const id = qrCertificateId.trim().toUpperCase();
-
       setDocumentType("certificate");
       setCertificateId(id);
       verifyDocument(id, "certificate");
@@ -105,6 +111,22 @@ export default function VerifyCertificate() {
     setDocumentType(type);
     setResult(null);
     setCertificateId("");
+  }
+
+  function formatDate(dateValue) {
+    if (!dateValue) {
+      return "Not available in Supabase";
+    }
+
+    const match = String(dateValue).match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+    if (match) {
+      return `${match[3]}-${match[2]}-${match[1]}`;
+    }
+
+    return String(dateValue);
   }
 
   const selectedLabel =
@@ -297,7 +319,8 @@ export default function VerifyCertificate() {
                     marginTop: 0,
                   }}
                 >
-                  ✓ {result.documentType === "certificate"
+                  ✓{" "}
+                  {result.documentType === "certificate"
                     ? "Certificate Record Found"
                     : "Offer Letter Record Found"}
                 </h2>
@@ -319,15 +342,15 @@ export default function VerifyCertificate() {
                   <strong>Program:</strong> {result.program}
                 </p>
 
-                {/* Date sirf Offer Letter verification mein */}
-                {result.documentType === "offer" && (
-                  <p style={{ marginTop: "10px" }}>
-                    <strong>Issue Date:</strong>{" "}
-                    {result.issueDate
-                      ? result.issueDate
-                      : "Not available in Supabase"}
-                  </p>
-                )}
+                {/* Date for selected document */}
+                <p style={{ marginTop: "10px" }}>
+                  <strong>
+                    {result.documentType === "offer"
+                      ? "Offer Letter Issue Date:"
+                      : "Certificate Issue Date:"}
+                  </strong>{" "}
+                  {formatDate(result.issueDate)}
+                </p>
 
                 {/* Certificate status */}
                 {result.documentType === "certificate" && (
@@ -357,7 +380,7 @@ export default function VerifyCertificate() {
                   </p>
                 )}
 
-                {/* QR code certificate verification par */}
+                {/* QR code for certificate verification */}
                 {result.documentType === "certificate" && (
                   <div
                     style={{
