@@ -239,7 +239,7 @@ export default function VerifyCertificate() {
             type="text"
             value={certificateId}
             onChange={(e) => setCertificateId(e.target.value)}
-            placeholder="INT-2026-000001"
+            placeholder="ENTER YOUR INTERN ID"
             aria-label={`${selectedLabel} ID`}
             style={{
               boxSizing: "border-box",
