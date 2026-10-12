@@ -4,10 +4,11 @@ import { supabase } from "../supabaseClient";
 import CertificateQR from "../components/CertificateQR.jsx";
 
 export default function VerifyCertificate() {
-  const [documentType, setDocumentType] = useState("certificate");
+  const [documentType, setDocumentType] = useState("offer");
   const [certificateId, setCertificateId] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [welcomeSlide, setWelcomeSlide] = useState(0);
 
   const NAVY = "#073B3A";
   const TEAL = "#079879";
@@ -32,12 +33,22 @@ export default function VerifyCertificate() {
     setLoading(true);
     setResult(null);
 
+    // Keep the animated waiting screen visible for at least 2.5 seconds.
+    const waitForAnimation = new Promise((resolve) =>
+      setTimeout(resolve, 2500)
+    );
+
     try {
-      const { data, error } = await supabase
-        .from("certificates")
-        .select("*")
-        .eq("certificate_id", cleanId)
-        .maybeSingle();
+      const [response] = await Promise.all([
+        supabase
+          .from("certificates")
+          .select("*")
+          .eq("certificate_id", cleanId)
+          .maybeSingle(),
+        waitForAnimation,
+      ]);
+
+      const { data, error } = response;
 
       if (error) {
         console.error("Verification error:", error);
@@ -68,6 +79,8 @@ export default function VerifyCertificate() {
         type === "offer"
           ? data.offer_letter_issue_date || null
           : data.certificate_issue_date || null;
+
+      setWelcomeSlide(0);
 
       setResult({
         valid: true,
@@ -103,6 +116,16 @@ export default function VerifyCertificate() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!result?.valid) return;
+
+    const interval = setInterval(() => {
+      setWelcomeSlide((current) => (current + 1) % 3);
+    }, 4500);
+
+    return () => clearInterval(interval);
+  }, [result?.valid, result?.certificateId]);
+
   async function handleVerify(e) {
     e.preventDefault();
     await verifyDocument(certificateId, documentType);
@@ -112,6 +135,7 @@ export default function VerifyCertificate() {
     setDocumentType(type);
     setCertificateId("");
     setResult(null);
+    setWelcomeSlide(0);
   }
 
   function formatDate(value) {
@@ -154,6 +178,7 @@ export default function VerifyCertificate() {
     fontSize: 15,
     fontWeight: 700,
     cursor: "pointer",
+    transition: "all .2s ease",
   };
 
   return (
@@ -167,6 +192,69 @@ export default function VerifyCertificate() {
         color: NAVY,
       }}
     >
+      <style>{`
+        @keyframes welcomeSlideIn {
+          from { opacity: 0; transform: translateX(28px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+
+        @keyframes waitingSpin {
+          to { transform: rotate(360deg); }
+        }
+
+        @keyframes waitingBounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+          30% { transform: translateY(-8px); opacity: 1; }
+        }
+
+        @keyframes softGlow {
+          0%, 100% { box-shadow: 0 8px 28px rgba(7,152,121,.08); }
+          50% { box-shadow: 0 12px 34px rgba(7,152,121,.2); }
+        }
+
+        .welcome-slide {
+          animation: welcomeSlideIn .65s ease both;
+        }
+
+        .waiting-spinner {
+          width: 48px;
+          height: 48px;
+          border: 4px solid #DDF8EC;
+          border-top-color: #079879;
+          border-radius: 50%;
+          margin: 0 auto 18px;
+          animation: waitingSpin .8s linear infinite;
+        }
+
+        .waiting-dots {
+          display: flex;
+          justify-content: center;
+          gap: 8px;
+          margin-top: 18px;
+        }
+
+        .waiting-dots span {
+          width: 8px;
+          height: 8px;
+          background: #079879;
+          border-radius: 50%;
+          animation: waitingBounce 1s infinite;
+        }
+
+        .waiting-dots span:nth-child(2) { animation-delay: .15s; }
+        .waiting-dots span:nth-child(3) { animation-delay: .3s; }
+
+        .ceo-card {
+          animation: softGlow 4s ease-in-out infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .welcome-slide, .waiting-spinner, .waiting-dots span, .ceo-card {
+            animation: none !important;
+          }
+        }
+      `}</style>
+
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
         {/* Page heading */}
         <header
@@ -211,7 +299,7 @@ export default function VerifyCertificate() {
           </p>
         </header>
 
-        {/* Document selection */}
+        {/* Offer Letter first, Certificate second */}
         <div
           style={{
             display: "flex",
@@ -221,8 +309,8 @@ export default function VerifyCertificate() {
           }}
         >
           {[
-            ["certificate", "Verify Certificate"],
             ["offer", "Verify Offer Letter"],
+            ["certificate", "Verify Certificate"],
           ].map(([type, label]) => (
             <button
               key={type}
@@ -239,16 +327,18 @@ export default function VerifyCertificate() {
                     : "1px solid #CBE6DA",
               }}
             >
+              {documentType === type ? "✓ " : ""}
               {label}
             </button>
           ))}
         </div>
 
-        {/* Search */}
+        {/* Search form */}
         <section style={{ ...cardStyle, marginTop: 16 }}>
           <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>
             Find Your Record
           </h2>
+
           <p style={{ color: TEXT, lineHeight: 1.6, marginTop: 0 }}>
             Enter your {selectedLabel} ID to view your details and status.
           </p>
@@ -286,16 +376,48 @@ export default function VerifyCertificate() {
               style={{
                 ...buttonStyle,
                 opacity: loading ? 0.65 : 1,
+                cursor: loading ? "wait" : "pointer",
               }}
             >
-              {loading ? "Verifying..." : "Verify Now →"}
+              {loading ? "Please wait..." : "Verify Now →"}
             </button>
           </form>
         </section>
 
-        {/* Result */}
-        {result && (
+        {/* Animated waiting screen */}
+        {loading && (
           <section
+            className="waiting-card"
+            role="status"
+            aria-live="polite"
+            style={{
+              ...cardStyle,
+              marginTop: 20,
+              textAlign: "center",
+              padding: "34px 20px",
+            }}
+          >
+            <div className="waiting-spinner" />
+            <h2 style={{ margin: "0 0 8px", fontSize: 23 }}>
+              Please Wait...
+            </h2>
+            <p style={{ color: TEXT, lineHeight: 1.7, margin: 0 }}>
+              We're securely finding your record.
+              <br />
+              Your internship journey matters to us.
+            </p>
+            <div className="waiting-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+          </section>
+        )}
+
+        {/* Verification result */}
+        {!loading && result && (
+          <section
+            key={`${result.valid}-${result.certificateId || result.message}`}
             aria-live="polite"
             style={{
               ...cardStyle,
@@ -306,6 +428,7 @@ export default function VerifyCertificate() {
           >
             {result.valid ? (
               <>
+                {/* Record details */}
                 <div
                   style={{
                     background: MINT,
@@ -349,7 +472,6 @@ export default function VerifyCertificate() {
                     }
                     value={formatDate(result.issueDate)}
                   />
-
                   <Detail
                     label={
                       result.documentType === "offer"
@@ -364,9 +486,20 @@ export default function VerifyCertificate() {
                   />
                 </div>
 
-                {/* Personalized welcome */}
-                <div style={{ marginTop: 24, textAlign: "center" }}>
+                {/* Automatically sliding welcome messages */}
+                <div
+                  style={{
+                    marginTop: 24,
+                    padding: "24px 18px",
+                    borderRadius: 18,
+                    background: `linear-gradient(140deg, ${PALE}, ${WHITE})`,
+                    border: "1px solid #D5EEE3",
+                    textAlign: "center",
+                    overflow: "hidden",
+                  }}
+                >
                   <div style={{ fontSize: 30, marginBottom: 8 }}>✦</div>
+
                   <p
                     style={{
                       color: TEAL,
@@ -379,33 +512,109 @@ export default function VerifyCertificate() {
                     A PERSONAL WELCOME
                   </p>
 
-                  <h2
+                  <div
+                    key={welcomeSlide}
+                    className="welcome-slide"
                     style={{
-                      fontSize: "clamp(24px, 5vw, 32px)",
-                      lineHeight: 1.25,
-                      margin: "0 0 14px",
-                      color: NAVY,
+                      minHeight: 190,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
                     }}
                   >
-                    Welcome, {result.name}! 🎉
-                  </h2>
+                    {welcomeSlide === 0 && (
+                      <>
+                        <h2
+                          style={{
+                            fontSize: "clamp(24px, 5vw, 32px)",
+                            lineHeight: 1.25,
+                            margin: "0 0 14px",
+                            color: NAVY,
+                          }}
+                        >
+                          Welcome, {result.name}! 🎉
+                        </h2>
+                        <p style={slideTextStyle}>
+                          We're delighted to welcome you to the Internlytic
+                          Technologies family. Your internship is an
+                          opportunity to develop practical skills, explore
+                          new ideas, and take meaningful steps towards your
+                          professional goals.
+                        </p>
+                      </>
+                    )}
 
-                  <p
+                    {welcomeSlide === 1 && (
+                      <>
+                        <h2 style={slideHeadingStyle}>
+                          Your Growth Starts Here 🚀
+                        </h2>
+                        <p style={slideTextStyle}>
+                          Every task is a chance to learn something new.
+                          Stay consistent, submit your best work, and use
+                          feedback to strengthen your skills. Keep learning,
+                          improving, and moving forward.
+                        </p>
+                      </>
+                    )}
+
+                    {welcomeSlide === 2 && (
+                      <>
+                        <h2 style={slideHeadingStyle}>
+                          A Message from Your CEO 💚
+                        </h2>
+                        <p style={slideTextStyle}>
+                          I'm Arslan Fayyaz, CEO & Founder of Internlytic
+                          Technologies. We're happy to have you with us.
+                          Approach every challenge with curiosity and make
+                          the most of this learning experience.
+                        </p>
+                        <strong
+                          style={{
+                            display: "block",
+                            marginTop: 12,
+                            fontSize: 18,
+                            color: NAVY,
+                          }}
+                        >
+                          Arslan Fayyaz
+                        </strong>
+                        <span style={{ color: TEAL, fontSize: 13 }}>
+                          CEO & Founder | Internlytic Technologies
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Slide indicators */}
+                  <div
                     style={{
-                      color: TEXT,
-                      lineHeight: 1.9,
-                      fontSize: 15,
-                      margin: 0,
+                      display: "flex",
+                      justifyContent: "center",
+                      gap: 8,
+                      marginTop: 12,
                     }}
                   >
-                    We're delighted to welcome you to the Internlytic
-                    Technologies family. Your internship is an opportunity
-                    to develop practical skills, explore new ideas, and take
-                    meaningful steps towards your professional goals.
-                    Stay curious, work consistently, and make the most of
-                    every learning opportunity. We're here to encourage
-                    your growth throughout this journey.
-                  </p>
+                    {[0, 1, 2].map((slide) => (
+                      <button
+                        key={slide}
+                        type="button"
+                        aria-label={`Show welcome slide ${slide + 1}`}
+                        onClick={() => setWelcomeSlide(slide)}
+                        style={{
+                          width: welcomeSlide === slide ? 24 : 8,
+                          height: 8,
+                          border: "none",
+                          borderRadius: 10,
+                          padding: 0,
+                          background:
+                            welcomeSlide === slide ? TEAL : "#B8DCCF",
+                          cursor: "pointer",
+                          transition: "all .3s ease",
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
 
                 {/* Certificate guidance */}
@@ -433,175 +642,4 @@ export default function VerifyCertificate() {
                         fontSize: 14,
                       }}
                     >
-                      {isIssued
-                        ? "Congratulations on reaching this milestone! Thank you for being part of Internlytic Technologies. We hope your internship experience helps you move forward with confidence and continue building your skills."
-                        : "Complete all your assigned internship tasks, submit your work for review, and meet the internship requirements. Once you have successfully completed the required tasks and your completion has been confirmed, you will be eligible to receive your internship certificate. Keep learning, improving, and moving forward!"}
-                    </p>
-
-                    <button
-                      type="button"
-                      disabled
-                      title="The certificate PDF will be connected after it is issued."
-                      style={{
-                        ...buttonStyle,
-                        width: "100%",
-                        marginTop: 18,
-                        background: "#DCEBE5",
-                        color: "#52766B",
-                        cursor: "not-allowed",
-                      }}
-                    >
-                      ↓ Download Certificate — Coming Soon
-                    </button>
-
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: TEXT,
-                        lineHeight: 1.6,
-                        marginBottom: 0,
-                        textAlign: "center",
-                      }}
-                    >
-                      Your download will be available when your certificate
-                      has been issued and its PDF is connected.
-                    </p>
-                  </div>
-                )}
-
-                {/* CEO card */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 16,
-                    marginTop: 22,
-                    padding: 16,
-                    borderRadius: 17,
-                    background: NAVY,
-                    color: WHITE,
-                  }}
-                >
-                  <img
-                    src="/arslan-fayyaz.jpg"
-                    alt="Arslan Fayyaz, Founder and CEO"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                    style={{
-                      width: 82,
-                      height: 82,
-                      flexShrink: 0,
-                      objectFit: "cover",
-                      borderRadius: "50%",
-                      border: "3px solid #6AD8B3",
-                    }}
-                  />
-
-                  <div style={{ minWidth: 0 }}>
-                    <p
-                      style={{
-                        margin: "0 0 6px",
-                        color: "#79E0B8",
-                        fontSize: 11,
-                        fontWeight: 800,
-                        letterSpacing: 1,
-                      }}
-                    >
-                      WARM REGARDS
-                    </p>
-                    <h3 style={{ margin: "0 0 5px", fontSize: 20 }}>
-                      Arslan Fayyaz
-                    </h3>
-                    <p
-                      style={{
-                        margin: 0,
-                        color: "#D8F4E8",
-                        fontSize: 13,
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      CEO & Founder
-                      <br />
-                      Internlytic Technologies
-                    </p>
-                  </div>
-                </div>
-
-                {/* QR */}
-                {result.documentType === "certificate" && (
-                  <div
-                    style={{
-                      textAlign: "center",
-                      marginTop: 24,
-                      paddingTop: 20,
-                      borderTop: "1px solid #D5EEE3",
-                    }}
-                  >
-                    <h3 style={{ margin: "0 0 14px" }}>
-                      Certificate Verification QR
-                    </h3>
-                    <CertificateQR
-                      certificateId={result.certificateId}
-                    />
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <h2 style={{ color: "#B42318", marginTop: 0 }}>
-                  Record Not Found
-                </h2>
-                <p style={{ color: "#B42318", lineHeight: 1.7 }}>
-                  {result.message}
-                </p>
-              </>
-            )}
-          </section>
-        )}
-
-        <footer
-          style={{
-            textAlign: "center",
-            marginTop: 30,
-            color: TEXT,
-            fontSize: 12,
-            lineHeight: 1.8,
-          }}
-        >
-          <strong>INTERNLYTIC TECHNOLOGIES</strong>
-          <br />
-          Learn • Build • Grow
-          <br />© {new Date().getFullYear()} Internlytic Technologies
-        </footer>
-      </div>
-    </main>
-  );
-}
-
-function Detail({ label, value }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexWrap: "wrap",
-        justifyContent: "space-between",
-        gap: 6,
-        padding: "11px 0",
-        borderBottom: "1px solid #D5EEE3",
-      }}
-    >
-      <span style={{ color: "#45645F", fontSize: 14 }}>{label}</span>
-      <strong
-        style={{
-          color: "#073B3A",
-          fontSize: 14,
-          overflowWrap: "anywhere",
-          textAlign: "right",
-        }}
-      >
-        {value}
-      </strong>
-    </div>
-  );
-}
+                
