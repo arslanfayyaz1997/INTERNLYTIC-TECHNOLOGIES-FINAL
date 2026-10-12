@@ -642,4 +642,189 @@ export default function VerifyCertificate() {
                         fontSize: 14,
                       }}
                     >
-                
+                      {isIssued
+                        ? "Congratulations on reaching this milestone! Thank you for being part of Internlytic Technologies. We hope your internship experience helps you move forward with confidence and continue building your skills."
+                        : "Complete all your assigned internship tasks, submit your work for review, and meet the internship requirements. Once you have successfully completed the required tasks and your completion has been confirmed, you will be eligible to receive your internship certificate. Keep learning, improving, and moving forward!"}
+                    </p>
+
+                    <button
+                      type="button"
+                      disabled
+                      title="The certificate PDF will be connected after it is issued."
+                      style={{
+                        ...buttonStyle,
+                        width: "100%",
+                        marginTop: 18,
+                        background: "#DCEBE5",
+                        color: "#52766B",
+                        cursor: "not-allowed",
+                      }}
+                    >
+                      ↓ Download Certificate — Coming Soon
+                    </button>
+
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: TEXT,
+                        lineHeight: 1.6,
+                        marginBottom: 0,
+                        textAlign: "center",
+                      }}
+                    >
+                      Your download will be available when your certificate
+                      has been issued and its PDF is connected.
+                    </p>
+                  </div>
+                )}
+
+                {/* CEO photo and identity card */}
+                <div
+                  className="ceo-card"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 16,
+                    marginTop: 22,
+                    padding: 16,
+                    borderRadius: 17,
+                    background: NAVY,
+                    color: WHITE,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <img
+                    src="/arslan-fayyaz.jpg"
+                    alt="Arslan Fayyaz, Founder and CEO"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                    style={{
+                      width: 82,
+                      height: 82,
+                      flexShrink: 0,
+                      objectFit: "cover",
+                      borderRadius: "50%",
+                      border: "3px solid #6AD8B3",
+                    }}
+                  />
+
+                  <div style={{ minWidth: 0, flex: "1 1 180px" }}>
+                    <p
+                      style={{
+                        margin: "0 0 6px",
+                        color: "#79E0B8",
+                        fontSize: 11,
+                        fontWeight: 800,
+                        letterSpacing: 1,
+                      }}
+                    >
+                      WARM REGARDS
+                    </p>
+                    <h3 style={{ margin: "0 0 5px", fontSize: 20 }}>
+                      Arslan Fayyaz
+                    </h3>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: "#D8F4E8",
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      CEO & Founder
+                      <br />
+                      Internlytic Technologies
+                    </p>
+                  </div>
+                </div>
+
+                {/* Certificate QR */}
+                {result.documentType === "certificate" && (
+                  <div
+                    style={{
+                      textAlign: "center",
+                      marginTop: 24,
+                      paddingTop: 20,
+                      borderTop: "1px solid #D5EEE3",
+                    }}
+                  >
+                    <h3 style={{ margin: "0 0 14px" }}>
+                      Certificate Verification QR
+                    </h3>
+                    <CertificateQR certificateId={result.certificateId} />
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 style={{ color: "#B42318", marginTop: 0 }}>
+                  ✕ Record Not Found
+                </h2>
+                <p style={{ color: "#B42318", lineHeight: 1.7 }}>
+                  {result.message}
+                </p>
+              </>
+            )}
+          </section>
+        )}
+
+        <footer
+          style={{
+            textAlign: "center",
+            marginTop: 30,
+            color: TEXT,
+            fontSize: 12,
+            lineHeight: 1.8,
+          }}
+        >
+          <strong>INTERNLYTIC TECHNOLOGIES</strong>
+          <br />
+          Learn • Build • Grow
+          <br />© {new Date().getFullYear()} Internlytic Technologies
+        </footer>
+      </div>
+    </main>
+  );
+}
+
+const slideHeadingStyle = {
+  fontSize: "clamp(24px, 5vw, 30px)",
+  lineHeight: 1.25,
+  margin: "0 0 14px",
+  color: "#073B3A",
+};
+
+const slideTextStyle = {
+  color: "#45645F",
+  lineHeight: 1.9,
+  fontSize: 15,
+  margin: 0,
+};
+
+function Detail({ label, value }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        justifyContent: "space-between",
+        gap: 6,
+        padding: "11px 0",
+        borderBottom: "1px solid #D5EEE3",
+      }}
+    >
+      <span style={{ color: "#45645F", fontSize: 14 }}>{label}</span>
+      <strong
+        style={{
+          color: "#073B3A",
+          fontSize: 14,
+          overflowWrap: "anywhere",
+          textAlign: "right",
+        }}
+      >
+        {value}
+      </strong>
+    </div>
+  );
+}
