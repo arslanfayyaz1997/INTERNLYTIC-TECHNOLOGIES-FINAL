@@ -16,6 +16,7 @@ export default function VerifyCertificate() {
   const PALE = "#F0FBF5";
   const WHITE = "#FFFFFF";
   const TEXT = "#45645F";
+  const LIGHT_BORDER = "#BFE8D7";
 
   async function verifyDocument(id, type = documentType) {
     const cleanId = id.trim().toUpperCase();
@@ -33,7 +34,6 @@ export default function VerifyCertificate() {
     setLoading(true);
     setResult(null);
 
-    // Keep the animated waiting screen visible for at least 2.5 seconds.
     const waitForAnimation = new Promise((resolve) =>
       setTimeout(resolve, 2500)
     );
@@ -116,12 +116,13 @@ export default function VerifyCertificate() {
     }
   }, []);
 
+  // Welcome slider: changes every 2.5 seconds.
   useEffect(() => {
     if (!result?.valid) return;
 
     const interval = setInterval(() => {
-      setWelcomeSlide((current) => (current + 1) % 3);
-    }, 4500);
+      setWelcomeSlide((current) => (current + 1) % 2);
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [result?.valid, result?.certificateId]);
@@ -163,7 +164,7 @@ export default function VerifyCertificate() {
 
   const cardStyle = {
     background: WHITE,
-    border: "1px solid #D5EEE3",
+    border: `1px solid ${LIGHT_BORDER}`,
     borderRadius: 20,
     padding: 22,
     boxShadow: "0 8px 28px rgba(7,59,58,0.06)",
@@ -194,7 +195,7 @@ export default function VerifyCertificate() {
     >
       <style>{`
         @keyframes welcomeSlideIn {
-          from { opacity: 0; transform: translateX(28px); }
+          from { opacity: 0; transform: translateX(22px); }
           to { opacity: 1; transform: translateX(0); }
         }
 
@@ -203,17 +204,27 @@ export default function VerifyCertificate() {
         }
 
         @keyframes waitingBounce {
-          0%, 60%, 100% { transform: translateY(0); opacity: .4; }
-          30% { transform: translateY(-8px); opacity: 1; }
+          0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: .4;
+          }
+          30% {
+            transform: translateY(-8px);
+            opacity: 1;
+          }
         }
 
         @keyframes softGlow {
-          0%, 100% { box-shadow: 0 8px 28px rgba(7,152,121,.08); }
-          50% { box-shadow: 0 12px 34px rgba(7,152,121,.2); }
+          0%, 100% {
+            box-shadow: 0 8px 24px rgba(7,152,121,.06);
+          }
+          50% {
+            box-shadow: 0 10px 28px rgba(7,152,121,.13);
+          }
         }
 
         .welcome-slide {
-          animation: welcomeSlideIn .65s ease both;
+          animation: welcomeSlideIn .4s ease both;
         }
 
         .waiting-spinner {
@@ -241,15 +252,23 @@ export default function VerifyCertificate() {
           animation: waitingBounce 1s infinite;
         }
 
-        .waiting-dots span:nth-child(2) { animation-delay: .15s; }
-        .waiting-dots span:nth-child(3) { animation-delay: .3s; }
+        .waiting-dots span:nth-child(2) {
+          animation-delay: .15s;
+        }
+
+        .waiting-dots span:nth-child(3) {
+          animation-delay: .3s;
+        }
 
         .ceo-card {
           animation: softGlow 4s ease-in-out infinite;
         }
 
         @media (prefers-reduced-motion: reduce) {
-          .welcome-slide, .waiting-spinner, .waiting-dots span, .ceo-card {
+          .welcome-slide,
+          .waiting-spinner,
+          .waiting-dots span,
+          .ceo-card {
             animation: none !important;
           }
         }
@@ -263,7 +282,7 @@ export default function VerifyCertificate() {
             padding: "28px 18px",
             borderRadius: 22,
             background: WHITE,
-            border: "1px solid #D5EEE3",
+            border: `1px solid ${LIGHT_BORDER}`,
             boxShadow: "0 8px 28px rgba(7,59,58,0.06)",
           }}
         >
@@ -387,7 +406,6 @@ export default function VerifyCertificate() {
         {/* Animated waiting screen */}
         {loading && (
           <section
-            className="waiting-card"
             role="status"
             aria-live="polite"
             style={{
@@ -398,14 +416,17 @@ export default function VerifyCertificate() {
             }}
           >
             <div className="waiting-spinner" />
+
             <h2 style={{ margin: "0 0 8px", fontSize: 23 }}>
               Please Wait...
             </h2>
+
             <p style={{ color: TEXT, lineHeight: 1.7, margin: 0 }}>
               We're securely finding your record.
               <br />
               Your internship journey matters to us.
             </p>
+
             <div className="waiting-dots" aria-hidden="true">
               <span />
               <span />
@@ -423,7 +444,7 @@ export default function VerifyCertificate() {
               ...cardStyle,
               marginTop: 20,
               background: result.valid ? WHITE : "#FFF8F7",
-              borderColor: result.valid ? "#BFE8D7" : "#F2CECA",
+              borderColor: result.valid ? LIGHT_BORDER : "#F2CECA",
             }}
           >
             {result.valid ? (
@@ -455,6 +476,7 @@ export default function VerifyCertificate() {
                   </h2>
 
                   <Detail label="Student Name" value={result.name} />
+
                   <Detail
                     label={
                       result.documentType === "certificate"
@@ -463,7 +485,9 @@ export default function VerifyCertificate() {
                     }
                     value={result.certificateId}
                   />
+
                   <Detail label="Program" value={result.program} />
+
                   <Detail
                     label={
                       result.documentType === "offer"
@@ -472,6 +496,7 @@ export default function VerifyCertificate() {
                     }
                     value={formatDate(result.issueDate)}
                   />
+
                   <Detail
                     label={
                       result.documentType === "offer"
@@ -486,14 +511,14 @@ export default function VerifyCertificate() {
                   />
                 </div>
 
-                {/* Automatically sliding welcome messages */}
+                {/* Two welcome slides */}
                 <div
                   style={{
                     marginTop: 24,
                     padding: "24px 18px",
                     borderRadius: 18,
-                    background: `linear-gradient(140deg, ${PALE}, ${WHITE})`,
-                    border: "1px solid #D5EEE3",
+                    background: MINT,
+                    border: `1px solid ${LIGHT_BORDER}`,
                     textAlign: "center",
                     overflow: "hidden",
                   }}
@@ -524,16 +549,10 @@ export default function VerifyCertificate() {
                   >
                     {welcomeSlide === 0 && (
                       <>
-                        <h2
-                          style={{
-                            fontSize: "clamp(24px, 5vw, 32px)",
-                            lineHeight: 1.25,
-                            margin: "0 0 14px",
-                            color: NAVY,
-                          }}
-                        >
+                        <h2 style={slideHeadingStyle}>
                           Welcome, {result.name}! 🎉
                         </h2>
+
                         <p style={slideTextStyle}>
                           We're delighted to welcome you to the Internlytic
                           Technologies family. Your internship is an
@@ -549,6 +568,7 @@ export default function VerifyCertificate() {
                         <h2 style={slideHeadingStyle}>
                           Your Growth Starts Here 🚀
                         </h2>
+
                         <p style={slideTextStyle}>
                           Every task is a chance to learn something new.
                           Stay consistent, submit your best work, and use
@@ -557,36 +577,9 @@ export default function VerifyCertificate() {
                         </p>
                       </>
                     )}
-
-                    {welcomeSlide === 2 && (
-                      <>
-                        <h2 style={slideHeadingStyle}>
-                          A Message from Your CEO 💚
-                        </h2>
-                        <p style={slideTextStyle}>
-                          I'm Arslan Fayyaz, CEO & Founder of Internlytic
-                          Technologies. We're happy to have you with us.
-                          Approach every challenge with curiosity and make
-                          the most of this learning experience.
-                        </p>
-                        <strong
-                          style={{
-                            display: "block",
-                            marginTop: 12,
-                            fontSize: 18,
-                            color: NAVY,
-                          }}
-                        >
-                          Arslan Fayyaz
-                        </strong>
-                        <span style={{ color: TEAL, fontSize: 13 }}>
-                          CEO & Founder | Internlytic Technologies
-                        </span>
-                      </>
-                    )}
                   </div>
 
-                  {/* Slide indicators */}
+                  {/* Two slide indicators */}
                   <div
                     style={{
                       display: "flex",
@@ -595,7 +588,7 @@ export default function VerifyCertificate() {
                       marginTop: 12,
                     }}
                   >
-                    {[0, 1, 2].map((slide) => (
+                    {[0, 1].map((slide) => (
                       <button
                         key={slide}
                         type="button"
@@ -608,7 +601,7 @@ export default function VerifyCertificate() {
                           borderRadius: 10,
                           padding: 0,
                           background:
-                            welcomeSlide === slide ? TEAL : "#B8DCCF",
+                            welcomeSlide === slide ? TEAL : "#A8D9C5",
                           cursor: "pointer",
                           transition: "all .3s ease",
                         }}
@@ -624,8 +617,8 @@ export default function VerifyCertificate() {
                       marginTop: 24,
                       padding: 20,
                       borderRadius: 17,
-                      background: isIssued ? MINT : "#F0FBF7",
-                      border: "1px solid #CBEBDD",
+                      background: MINT,
+                      border: `1px solid ${LIGHT_BORDER}`,
                     }}
                   >
                     <h3 style={{ margin: "0 0 10px", fontSize: 19 }}>
@@ -678,7 +671,7 @@ export default function VerifyCertificate() {
                   </div>
                 )}
 
-                {/* CEO photo and identity card */}
+                {/* CEO card: matching light-green page theme */}
                 <div
                   className="ceo-card"
                   style={{
@@ -688,8 +681,9 @@ export default function VerifyCertificate() {
                     marginTop: 22,
                     padding: 16,
                     borderRadius: 17,
-                    background: NAVY,
-                    color: WHITE,
+                    background: MINT,
+                    color: NAVY,
+                    border: `1px solid ${LIGHT_BORDER}`,
                     flexWrap: "wrap",
                   }}
                 >
@@ -705,7 +699,7 @@ export default function VerifyCertificate() {
                       flexShrink: 0,
                       objectFit: "cover",
                       borderRadius: "50%",
-                      border: "3px solid #6AD8B3",
+                      border: `3px solid ${TEAL}`,
                     }}
                   />
 
@@ -713,7 +707,7 @@ export default function VerifyCertificate() {
                     <p
                       style={{
                         margin: "0 0 6px",
-                        color: "#79E0B8",
+                        color: TEAL,
                         fontSize: 11,
                         fontWeight: 800,
                         letterSpacing: 1,
@@ -721,18 +715,26 @@ export default function VerifyCertificate() {
                     >
                       WARM REGARDS
                     </p>
-                    <h3 style={{ margin: "0 0 5px", fontSize: 20 }}>
+
+                    <h3
+                      style={{
+                        margin: "0 0 5px",
+                        fontSize: 20,
+                        color: NAVY,
+                      }}
+                    >
                       Arslan Fayyaz
                     </h3>
+
                     <p
                       style={{
                         margin: 0,
-                        color: "#D8F4E8",
+                        color: TEXT,
                         fontSize: 13,
                         lineHeight: 1.6,
                       }}
                     >
-                      CEO & Founder
+                      CEO &amp; Founder
                       <br />
                       Internlytic Technologies
                     </p>
@@ -752,6 +754,7 @@ export default function VerifyCertificate() {
                     <h3 style={{ margin: "0 0 14px" }}>
                       Certificate Verification QR
                     </h3>
+
                     <CertificateQR certificateId={result.certificateId} />
                   </div>
                 )}
@@ -761,6 +764,7 @@ export default function VerifyCertificate() {
                 <h2 style={{ color: "#B42318", marginTop: 0 }}>
                   ✕ Record Not Found
                 </h2>
+
                 <p style={{ color: "#B42318", lineHeight: 1.7 }}>
                   {result.message}
                 </p>
@@ -781,7 +785,8 @@ export default function VerifyCertificate() {
           <strong>INTERNLYTIC TECHNOLOGIES</strong>
           <br />
           Learn • Build • Grow
-          <br />© {new Date().getFullYear()} Internlytic Technologies
+          <br />
+          © {new Date().getFullYear()} Internlytic Technologies
         </footer>
       </div>
     </main>
@@ -815,6 +820,7 @@ function Detail({ label, value }) {
       }}
     >
       <span style={{ color: "#45645F", fontSize: 14 }}>{label}</span>
+
       <strong
         style={{
           color: "#073B3A",
