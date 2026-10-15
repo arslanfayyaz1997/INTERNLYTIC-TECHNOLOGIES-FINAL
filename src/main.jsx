@@ -18,13 +18,9 @@ import AboutPage from "./pages/AboutPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import LegalPage from "./pages/LegalPage.jsx";
+import { ScrollToTop } from "./components/ScrollToTop.jsx";
 import VerifyCertificate from "./pages/VerifyCertificate.jsx";
 
-// Dashboard pages
-import AdminDashboardPage from "./pages/AdminDashboardPage.jsx";
-import InternPortalPage from "./pages/InternPortalPage.jsx";
-
-import { ScrollToTop } from "./components/ScrollToTop.jsx";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
@@ -42,14 +38,8 @@ createRoot(document.getElementById("root")).render(
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/about" element={<AboutPage />} />
 
-        {/* Internship login */}
+        {/* Internship Login Portal */}
         <Route path="/login" element={<LoginPage />} />
-
-        {/* Admin dashboard */}
-        <Route path="/admin" element={<AdminDashboardPage />} />
-
-        {/* Intern portal */}
-        <Route path="/portal" element={<InternPortalPage />} />
 
         {/* Public registration disabled */}
         <Route
@@ -60,11 +50,9 @@ createRoot(document.getElementById("root")).render(
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
-
-        {/* Certificate verification remains available */}
         <Route path="/verify" element={<VerifyCertificate />} />
 
-        {/* Unknown URLs */}
+        {/* Unknown URLs return to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
