@@ -1,10 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
+BrowserRouter,
+Routes,
+Route,
+Navigate,
 } from "react-router-dom";
 
 import App from "./App.jsx";
@@ -24,39 +24,38 @@ import VerifyCertificate from "./pages/VerifyCertificate.jsx";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <BrowserRouter>
-      <ScrollToTop />
+<StrictMode>
+<BrowserRouter>
+<ScrollToTop />
 
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/apply" element={<ApplyPage />} />
-        <Route path="/how-it-works" element={<HowItWorksPage />} />
-        <Route path="/courses" element={<CoursesPage />} />
-        <Route path="/faq" element={<FAQPage />} />
-        <Route path="/services" element={<ServicesPage />} />
-        <Route path="/contact" element={<ContactPage />} />
-        <Route path="/about" element={<AboutPage />} />
+  <Routes>
+    <Route path="/" element={<App />} />
+    <Route path="/apply" element={<ApplyPage />} />
+    <Route path="/how-it-works" element={<HowItWorksPage />} />
+    <Route path="/courses" element={<CoursesPage />} />
+    <Route path="/faq" element={<FAQPage />} />
+    <Route path="/services" element={<ServicesPage />} />
+    <Route path="/contact" element={<ContactPage />} />
+    <Route path="/about" element={<AboutPage />} />
 
-        {/* Internship Login Portal */}
-        <Route path="/login" element={<LoginPage />} />
+    {/* Login only — registration removed */}
+    <Route path="/login" element={<LoginPage />} />
+    <Route
+      path="/register"
+      element={<Navigate to="/login" replace />}
+    />
 
-        {/* Registration disabled */}
-        <Route
-          path="/register"
-          element={<Navigate to="/login" replace />}
-        />
+    <Route path="/profile" element={<ProfilePage />} />
+    <Route path="/privacy" element={<LegalPage />} />
+    <Route path="/terms" element={<LegalPage />} />
 
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/privacy" element={<LegalPage />} />
-        <Route path="/terms" element={<LegalPage />} />
+    {/* Certificate verification — unchanged */}
+    <Route path="/verify" element={<VerifyCertificate />} />
 
-        {/* Certificate Verification */}
-        <Route path="/verify" element={<VerifyCertificate />} />
+    {/* Unknown URLs return home */}
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>
+</BrowserRouter>
 
-        {/* Unknown URLs return to home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
   </StrictMode>
 );
