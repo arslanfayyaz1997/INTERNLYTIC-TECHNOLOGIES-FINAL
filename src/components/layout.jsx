@@ -293,8 +293,11 @@ export function Header() {
               </div>
             </div>
           ) : (
-            <Button asChild variant="ghost">
-              <Link to="/login">Log in</Link>
+            <Button
+              asChild
+              className="!rounded-xl !border-0 !bg-green-600 !px-5 !py-2.5 !font-bold !text-white !shadow-md transition-all hover:!bg-green-700"
+            >
+              <Link to="/login">Login</Link>
             </Button>
           )}
 
@@ -416,12 +419,15 @@ export function Header() {
                   </Button>
                 </>
               ) : (
-                <Button asChild variant="brandOutline">
+                <Button
+                  asChild
+                  className="!rounded-xl !border-0 !bg-green-600 !font-bold !text-white !shadow-md transition-all hover:!bg-green-700"
+                >
                   <Link
                     to="/login"
                     onClick={() => setMenuOpen(false)}
                   >
-                    Log in
+                    Login
                   </Link>
                 </Button>
               )}
