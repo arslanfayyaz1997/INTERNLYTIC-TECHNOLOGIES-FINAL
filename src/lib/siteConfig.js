@@ -1,5 +1,6 @@
 /**
- * Public site settings. Change these values here; do not put passwords or secret keys in this file.
+ * Public site settings.
+ * Never put passwords or secret keys here.
  */
 export const siteConfig = {
   companyName: "Internlytic Technologies",
@@ -8,7 +9,13 @@ export const siteConfig = {
 };
 
 export const isConfiguredEmail = () =>
-  Boolean(siteConfig.contactEmail && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(siteConfig.contactEmail));
+  Boolean(
+    siteConfig.contactEmail &&
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(siteConfig.contactEmail)
+  );
 
 export const isConfiguredGoogleForm = () =>
-  Boolean(siteConfig.googleFormUrl && /^https?:\\/\\//i.test(siteConfig.googleFormUrl));
+  Boolean(
+    siteConfig.googleFormUrl &&
+      /^https?:\/\//i.test(siteConfig.googleFormUrl)
+  );
