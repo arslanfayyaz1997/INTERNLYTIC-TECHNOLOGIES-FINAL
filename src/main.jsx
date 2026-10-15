@@ -41,7 +41,7 @@ createRoot(document.getElementById("root")).render(
         {/* Internship Login Portal */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Public registration disabled */}
+        {/* Registration disabled */}
         <Route
           path="/register"
           element={<Navigate to="/login" replace />}
@@ -50,6 +50,8 @@ createRoot(document.getElementById("root")).render(
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
+
+        {/* Certificate Verification */}
         <Route path="/verify" element={<VerifyCertificate />} />
 
         {/* Unknown URLs return to home */}
