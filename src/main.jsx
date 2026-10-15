@@ -1,6 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+
 import App from "./App.jsx";
 import ApplyPage from "./pages/ApplyPage.jsx";
 import HowItWorksPage from "./pages/HowItWorksPage.jsx";
@@ -10,17 +16,18 @@ import ServicesPage from "./pages/ServicesPage.jsx";
 import ContactPage from "./pages/ContactPage.jsx";
 import AboutPage from "./pages/AboutPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
-import RegisterPage from "./pages/RegisterPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import LegalPage from "./pages/LegalPage.jsx";
 import { ScrollToTop } from "./components/ScrollToTop.jsx";
-import "./styles.css";
 import VerifyCertificate from "./pages/VerifyCertificate.jsx";
+
+import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <BrowserRouter>
       <ScrollToTop />
+
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/apply" element={<ApplyPage />} />
@@ -30,13 +37,24 @@ createRoot(document.getElementById("root")).render(
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/about" element={<AboutPage />} />
+
+        {/* Internship Login Portal */}
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
+
+        {/* Public registration disabled */}
+        <Route
+          path="/register"
+          element={<Navigate to="/login" replace />}
+        />
+
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/privacy" element={<LegalPage />} />
         <Route path="/terms" element={<LegalPage />} />
-<Route path="/verify" element={<VerifyCertificate />} />
+        <Route path="/verify" element={<VerifyCertificate />} />
+
+        {/* Unknown URLs return to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
-  </StrictMode>,
+  </StrictMode>
 );
