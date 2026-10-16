@@ -3,8 +3,6 @@ import {
   ArrowRight,
   ShieldCheck,
   GraduationCap,
-  Eye,
-  EyeOff,
   LoaderCircle,
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
@@ -25,10 +23,9 @@ export default function LoginPage() {
 
   const [role, setRole] = useState("intern");
   const [internId, setInternId] = useState("");
-  const [track, setTrack] = useState("");
-  const [email, setEmail] = useState(ADMIN_EMAIL);
-  const [pin, setPin] = useState("");
-  const [showPin, setShowPin] = useState(false);
+  const [email, setEmail] = useState("");
+  const [adminEmail, setAdminEmail] = useState(ADMIN_EMAIL);
+  const [adminPin, setAdminPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -40,56 +37,65 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const normalizedEmail = email.trim().toLowerCase();
+      let account;
 
-      if (role === "ceo" && normalizedEmail !== ADMIN_EMAIL) {
-        throw new Error(
-          "CEO email does not match the authorized admin email."
+      if (role === "intern") {
+        if (!internId.trim() || !email.trim()) {
+          throw new Error("Enter your Intern ID and registered Gmail.");
+        }
+
+        const { data, error: rpcError } = await supabase.rpc(
+          "portal_intern_login",
+          {
+            p_intern_id: internId.trim(),
+            p_email: email.trim().toLowerCase(),
+          }
         );
-      }
 
-      if (role === "intern" && !internId.trim()) {
-        throw new Error("Please enter your Intern ID.");
-      }
+        if (rpcError) throw new Error(rpcError.message);
 
-      const args =
-        role === "ceo"
-          ? {
-              p_role: "ceo",
-              p_email: normalizedEmail,
-              p_intern_id: null,
-              p_track: null,
-              p_pin: pin.trim(),
-            }
-          : {
-              p_role: "intern",
-              p_email: null,
-              p_intern_id: internId.trim(),
-              p_track: track.trim(),
-              p_pin: pin.trim(),
-            };
+        account = Array.isArray(data) ? data[0] : data;
 
-      const { data, error: rpcError } = await supabase.rpc(
-        "portal_login",
-        args
-      );
+        if (!account || account.ok !== true) {
+          throw new Error(
+            account?.message || "Intern ID or registered Gmail does not match."
+          );
+        }
+      } else {
+        const normalizedEmail = adminEmail.trim().toLowerCase();
 
-      if (rpcError) {
-        throw new Error(rpcError.message);
-      }
+        if (normalizedEmail !== ADMIN_EMAIL) {
+          throw new Error("CEO email does not match the authorized admin email.");
+        }
 
-      const account = Array.isArray(data) ? data[0] : data;
+        if (!adminPin.trim()) {
+          throw new Error("Enter the admin PIN.");
+        }
 
-      if (!account || account.ok !== true) {
-        throw new Error(
-          account?.message || "Login failed. Check your details."
+        const { data, error: rpcError } = await supabase.rpc(
+          "portal_login",
+          {
+            p_role: "ceo",
+            p_email: normalizedEmail,
+            p_intern_id: null,
+            p_track: null,
+            p_pin: adminPin.trim(),
+          }
         );
+
+        if (rpcError) throw new Error(rpcError.message);
+
+        account = Array.isArray(data) ? data[0] : data;
+
+        if (!account || account.ok !== true) {
+          throw new Error(account?.message || "Admin login failed.");
+        }
       }
 
       const profile = account.intern || account;
 
       const session = {
-        role: account.role || role,
+        role: role === "ceo" ? "ceo" : "intern",
         intern_id:
           account.intern_id ||
           profile.intern_id ||
@@ -110,14 +116,15 @@ export default function LoginPage() {
           profile.track ||
           profile.program ||
           "",
-        pin: pin.trim(),
         loginAt: new Date().toISOString(),
       };
 
       if (role === "intern" && !session.intern_id) {
-        throw new Error(
-          "Login succeeded, but the Intern ID was not returned."
-        );
+        throw new Error("Intern ID was not returned by the server.");
+      }
+
+      if (role === "ceo") {
+        session.pin = adminPin.trim();
       }
 
       sessionStorage.setItem(
@@ -131,9 +138,7 @@ export default function LoginPage() {
         replace: true,
       });
     } catch (err) {
-      setError(
-        err?.message || "Unable to log in. Please check your details."
-      );
+      setError(err?.message || "Unable to log in. Check your details.");
     } finally {
       setLoading(false);
     }
@@ -148,7 +153,6 @@ export default function LoginPage() {
         <span className="grid size-12 place-items-center rounded-xl bg-secondary text-primary">
           <ShieldCheck />
         </span>
-
         <div>
           <p className="text-xs font-bold uppercase tracking-[.18em] text-primary">
             Internlytic Technologies
@@ -157,7 +161,7 @@ export default function LoginPage() {
             Internship Portal Login
           </h1>
           <p className="text-sm text-muted-foreground">
-            Secure access for our CEO and interns.
+            Access your personal internship dashboard.
           </p>
         </div>
       </div>
@@ -167,7 +171,6 @@ export default function LoginPage() {
           type="button"
           onClick={() => {
             setRole("ceo");
-            setEmail(ADMIN_EMAIL);
             setError("");
             setMessage("");
           }}
@@ -206,19 +209,7 @@ export default function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
-        {role === "ceo" ? (
-          <div className="grid gap-2">
-            <Label htmlFor="ceo-email">CEO Gmail</Label>
-            <Input
-              id="ceo-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="username"
-              required
-            />
-          </div>
-        ) : (
+        {role === "intern" ? (
           <>
             <div className="grid gap-2">
               <Label htmlFor="intern-id">Intern ID</Label>
@@ -233,42 +224,45 @@ export default function LoginPage() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="intern-track">Internship Track</Label>
+              <Label htmlFor="intern-email">Registered Gmail address</Label>
               <Input
-                id="intern-track"
-                value={track}
-                onChange={(e) => setTrack(e.target.value)}
-                placeholder="e.g. Front End, UX/UI, Prompt Engineering"
+                id="intern-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter the Gmail saved in your application"
+                autoComplete="email"
+                required
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="grid gap-2">
+              <Label htmlFor="ceo-email">CEO Gmail</Label>
+              <Input
+                id="ceo-email"
+                type="email"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="admin-pin">Admin PIN</Label>
+              <Input
+                id="admin-pin"
+                type="password"
+                value={adminPin}
+                onChange={(e) => setAdminPin(e.target.value)}
+                autoComplete="current-password"
                 required
               />
             </div>
           </>
         )}
-
-        <div className="grid gap-2">
-          <Label htmlFor="secret-pin">Secret PIN</Label>
-
-          <div className="relative">
-            <Input
-              id="secret-pin"
-              type={showPin ? "text" : "password"}
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              autoComplete="current-password"
-              className="pr-12"
-              required
-            />
-
-            <button
-              type="button"
-              onClick={() => setShowPin((value) => !value)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              aria-label={showPin ? "Hide PIN" : "Show PIN"}
-            >
-              {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          </div>
-        </div>
 
         {error && (
           <p
@@ -310,7 +304,7 @@ export default function LoginPage() {
       </form>
 
       <p className="mt-5 text-center text-xs leading-5 text-muted-foreground">
-        Use your assigned Intern ID, internship track, and secret PIN.{" "}
+        Interns: use your assigned ID and registered Gmail.{" "}
         <Link
           to="/verify"
           className="font-semibold text-primary underline-offset-4 hover:underline"
