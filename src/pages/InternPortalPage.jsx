@@ -37,28 +37,14 @@ const TASK_DEFINITIONS = [
     requiredLink: true,
   },
   {
-    number: 2,
-    title: "Week 2 Task",
-    description:
-      "Upload your completed weekly task. You may submit documents, screenshots, presentations, or ZIP files.",
-    requiredFiles: true,
-  },
-  {
-    number: 3,
-    title: "Week 3 Task",
-    description:
-      "Submit your project work, supporting documents, screenshots, or design deliverables. A shareable Figma or project URL is also accepted.",
-    linkLabel: "Project or Figma URL",
-    linkPlaceholder: "https://www.figma.com/...",
-    allowLinkOrFiles: true,
-  },
-  {
     number: 4,
-    title: " Week Task 4 (Final Project Submission)",
+    title: " All Weeks Task (Project Submission)",
     description:
-      "This task is compulsory. Describe your project, upload your work, and provide your GitHub repository and LinkedIn project post.",
+      "Describe your project, upload your work, and provide your GitHub repository and LinkedIn project post.",
     requiredFinal: true,
   },
+  linkPlaceholder: "https://www.figma.com/...",
+    allowLinkOrFiles: true,
 ];
 
 const ACCEPTED_EXTENSIONS = [
