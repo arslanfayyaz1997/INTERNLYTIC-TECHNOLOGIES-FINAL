@@ -10,14 +10,13 @@ import {
   Clock3,
   Award,
   ExternalLink,
-  X,
   Github,
   Linkedin,
+  X,
   AlertCircle,
 } from "lucide-react";
 
-import { Header } from "@/components/Header";
-import { Footer } from "@/components/Footer";
+import { Header, Footer } from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,38 +26,38 @@ import { supabase } from "@/supabaseClient";
 const BUCKET = "intern-task-files";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const TASKS = [
+const TASK_DEFINITIONS = [
   {
     number: 1,
     title: "LinkedIn Offer Letter Post",
     description:
-      "Share the link to the LinkedIn post where you published your internship offer letter. Make sure the post is accessible for review.",
-    requireLink: true,
+      "Share the URL of your LinkedIn post announcing your internship offer letter.",
     linkLabel: "LinkedIn Post URL",
-    linkKey: "task_link",
+    linkPlaceholder: "https://www.linkedin.com/posts/...",
+    requiredLink: true,
   },
   {
     number: 2,
     title: "Weekly Task 1",
     description:
-      "Upload your completed weekly task. Accepted formats include PDF, Word documents, PowerPoint presentations, ZIP archives, screenshots, and text files.",
-    requireFiles: true,
+      "Upload your completed weekly task. You may submit documents, screenshots, presentations, or ZIP files.",
+    requiredFiles: true,
   },
   {
     number: 3,
     title: "Project Submission",
     description:
-      "Submit your project work, supporting documents, screenshots, or design files. You may also provide a shareable Figma or project link.",
-    requireFilesOrLink: true,
+      "Submit your project work, supporting documents, screenshots, or design deliverables. A shareable Figma or project URL is also accepted.",
     linkLabel: "Project or Figma URL",
-    linkKey: "task_link",
+    linkPlaceholder: "https://www.figma.com/...",
+    allowLinkOrFiles: true,
   },
   {
     number: 4,
-    title: "Final Project Submission (Compulsory)",
+    title: "Final Project Submission",
     description:
-      "Submit your final project, explain what you built, and provide your GitHub repository and LinkedIn post links. This task is compulsory.",
-    requireFinal: true,
+      "This task is compulsory. Describe your project, upload your work, and provide your GitHub repository and LinkedIn project post.",
+    requiredFinal: true,
   },
 ];
 
@@ -76,48 +75,40 @@ const ACCEPTED_EXTENSIONS = [
   ".fig",
 ];
 
-const emptyTask = () => ({
-  description: "",
-  task_link: "",
-  github_link: "",
-  linkedin_link: "",
-  files: [],
-});
-
 function readSession() {
   try {
-    const raw = sessionStorage.getItem("internlytic.portal.session");
-    return raw ? JSON.parse(raw) : null;
+    return JSON.parse(
+      sessionStorage.getItem("internlytic.portal.session") || "null"
+    );
   } catch {
     return null;
   }
 }
 
-function getInternId(session) {
-  return (
-    session?.intern_id ||
-    session?.certificate_id ||
-    session?.intern?.intern_id ||
-    session?.intern?.certificate_id ||
-    ""
-  );
+function emptyTask() {
+  return {
+    description: "",
+    task_link: "",
+    github_link: "",
+    linkedin_link: "",
+    files: [],
+  };
 }
 
-function getEmail(session) {
-  return (
-    session?.email ||
-    session?.student_email ||
-    session?.intern?.email ||
-    session?.intern?.student_email ||
-    ""
-  );
+function getErrorMessage(error, fallback) {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+  return error.message || fallback;
 }
 
 function normalizeUrl(value) {
-  const trimmed = (value || "").trim();
-  if (!trimmed) return "";
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
+  const input = (value || "").trim();
+
+  if (!input) return "";
+
+  return /^https?:\/\//i.test(input)
+    ? input
+    : `https://${input}`;
 }
 
 function isValidUrl(value) {
@@ -131,120 +122,140 @@ function isValidUrl(value) {
   }
 }
 
-function statusClass(status) {
-  const normalized = (status || "Not Submitted").toLowerCase();
-
-  if (normalized === "approved") {
-    return "bg-green-100 text-green-800";
+function statusStyle(status) {
+  switch (String(status || "").toLowerCase()) {
+    case "approved":
+      return "bg-green-100 text-green-800";
+    case "rejected":
+      return "bg-red-100 text-red-800";
+    case "under review":
+      return "bg-amber-100 text-amber-800";
+    default:
+      return "bg-secondary text-muted-foreground";
   }
+}
 
-  if (normalized === "rejected") {
-    return "bg-red-100 text-red-800";
-  }
-
-  if (normalized === "under review") {
-    return "bg-amber-100 text-amber-800";
-  }
-
-  return "bg-slate-100 text-slate-700";
+function Metric({ label, value }) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-border bg-card p-5">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-xl font-extrabold text-foreground">
+        {value}
+      </p>
+    </div>
+  );
 }
 
 export default function InternPortalPage() {
   const navigate = useNavigate();
 
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(() => readSession());
   const [profile, setProfile] = useState(null);
-  const [tasks, setTasks] = useState(() => TASKS.map(emptyTask));
-  const [savedSubmissions, setSavedSubmissions] = useState([]);
+  const [taskForms, setTaskForms] = useState(() =>
+    TASK_DEFINITIONS.map(() => emptyTask())
+  );
   const [publishedTasks, setPublishedTasks] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
     const currentSession = readSession();
 
-    if (!currentSession || !getInternId(currentSession) || !getEmail(currentSession)) {
-      navigate("/portal", { replace: true });
+    if (
+      !currentSession ||
+      currentSession.role !== "intern" ||
+      !currentSession.intern_id ||
+      !currentSession.email
+    ) {
+      navigate("/login", { replace: true });
       return;
     }
 
     setSession(currentSession);
-    loadPortal(currentSession);
-    // Load portal information when the page opens.
+    load(currentSession);
+
+    // Load the current intern's portal data on entry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadPortal(currentSession = session, showRefresh = false) {
-    if (!currentSession) return;
+  async function load(currentSession = session, isRefresh = false) {
+    if (!currentSession?.intern_id || !currentSession?.email) {
+      navigate("/login", { replace: true });
+      return;
+    }
 
-    if (showRefresh) setRefreshing(true);
+    if (isRefresh) setRefreshing(true);
     else setLoading(true);
 
-    setNotice(null);
+    setError("");
 
     try {
-      const internId = getInternId(currentSession);
-      const email = getEmail(currentSession);
-
-      const { data: loginData, error: loginError } = await supabase.rpc(
-        "portal_intern_login",
-        {
-          p_intern_id: internId,
-          p_email: email,
-        }
-      );
+      const { data: loginData, error: loginError } =
+        await supabase.rpc("portal_intern_login", {
+          p_intern_id: currentSession.intern_id,
+          p_email: currentSession.email,
+        });
 
       if (loginError) throw loginError;
 
-      if (!loginData?.ok) {
+      const result = Array.isArray(loginData)
+        ? loginData[0]
+        : loginData;
+
+      if (!result?.ok || !result.intern) {
         throw new Error(
-          loginData?.message ||
-            "Unable to verify your account. Please sign in again."
+          result?.message || "Unable to load your internship profile."
         );
       }
 
-      const intern = loginData.intern || {};
-
-      setProfile({
-        ...intern,
-        intern_id: intern.intern_id || internId,
-        email: intern.email || intern.student_email || email,
-      });
-
-      setPublishedTasks(Array.isArray(loginData.tasks) ? loginData.tasks : []);
+      setProfile(result.intern);
+      setPublishedTasks(
+        Array.isArray(result.tasks) ? result.tasks : []
+      );
 
       const { data: submissionData, error: submissionError } =
         await supabase.rpc("portal_get_my_task_submissions", {
-          p_intern_id: internId,
-          p_email: email,
+          p_intern_id: currentSession.intern_id,
+          p_email: currentSession.email,
         });
 
       if (submissionError) throw submissionError;
 
-      if (submissionData?.ok) {
-        const submissions = Array.isArray(submissionData.submissions)
-          ? submissionData.submissions
+      const submissionResult = Array.isArray(submissionData)
+        ? submissionData[0]
+        : submissionData;
+
+      if (submissionResult?.ok) {
+        const saved = Array.isArray(submissionResult.submissions)
+          ? submissionResult.submissions
           : [];
 
-        setSavedSubmissions(submissions);
+        setSubmissions(saved);
 
-        setTasks((previous) =>
-          TASKS.map((task) => {
-            const saved = submissions.find(
-              (item) => Number(item.task_number) === task.number
+        setTaskForms((previous) =>
+          TASK_DEFINITIONS.map((definition) => {
+            const existing = saved.find(
+              (item) =>
+                Number(item.task_number) === definition.number
             );
 
-            if (!saved) return previous[task.number - 1];
+            if (!existing) {
+              return previous[definition.number - 1];
+            }
 
             return {
-              description: saved.description || "",
-              task_link: saved.task_link || "",
-              github_link: saved.github_link || "",
-              linkedin_link: saved.linkedin_link || "",
-              files: Array.isArray(saved.files)
-                ? saved.files.map((file) => ({
+              description: existing.description || "",
+              task_link: existing.task_link || "",
+              github_link: existing.github_link || "",
+              linkedin_link: existing.linkedin_link || "",
+              files: Array.isArray(existing.files)
+                ? existing.files.map((file) => ({
                     ...file,
                     saved: true,
                   }))
@@ -252,14 +263,16 @@ export default function InternPortalPage() {
             };
           })
         );
+      } else if (submissionResult && !submissionResult.ok) {
+        throw new Error(
+          submissionResult.message ||
+            "Unable to retrieve your task submissions."
+        );
       }
-    } catch (error) {
-      setNotice({
-        type: "error",
-        text:
-          error?.message ||
-          "Unable to load your portal. Please refresh and try again.",
-      });
+    } catch (e) {
+      setError(
+        getErrorMessage(e, "Unable to load your internship dashboard.")
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -267,7 +280,7 @@ export default function InternPortalPage() {
   }
 
   function updateTask(taskNumber, field, value) {
-    setTasks((previous) =>
+    setTaskForms((previous) =>
       previous.map((task, index) =>
         index === taskNumber - 1
           ? { ...task, [field]: value }
@@ -276,103 +289,110 @@ export default function InternPortalPage() {
     );
   }
 
-  function handleFileSelection(taskNumber, event) {
-    const selectedFiles = Array.from(event.target.files || []);
+  function selectFiles(taskNumber, event) {
+    const selected = Array.from(event.target.files || []);
     event.target.value = "";
 
-    if (!selectedFiles.length) return;
+    if (!selected.length) return;
 
-    const currentFiles = tasks[taskNumber - 1].files;
-    const newFiles = [];
+    const current = taskForms[taskNumber - 1].files;
+    const accepted = [];
+    const rejected = [];
 
-    for (const file of selectedFiles) {
+    for (const file of selected) {
       const extension = `.${file.name.split(".").pop().toLowerCase()}`;
 
       if (!ACCEPTED_EXTENSIONS.includes(extension)) {
-        setNotice({
-          type: "error",
-          text: `${file.name}: This file format is not supported.`,
-        });
+        rejected.push(`${file.name}: Unsupported file format.`);
         continue;
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        setNotice({
-          type: "error",
-          text: `${file.name}: Each file must be 10 MB or smaller.`,
-        });
+        rejected.push(`${file.name}: Maximum file size is 10 MB.`);
         continue;
       }
 
-      const duplicate = [...currentFiles, ...newFiles].some(
+      const duplicate = [...current, ...accepted].some(
         (item) =>
           item.name === file.name &&
           item.size === file.size
       );
 
-      if (!duplicate) newFiles.push(file);
+      if (!duplicate) accepted.push(file);
     }
 
-    updateTask(taskNumber, "files", [...currentFiles, ...newFiles]);
+    if (rejected.length) {
+      setError(rejected.join(" "));
+    } else {
+      setError("");
+    }
+
+    updateTask(taskNumber, "files", [...current, ...accepted]);
   }
 
-  function removeFile(taskNumber, fileIndex) {
-    const updated = tasks[taskNumber - 1].files.filter(
-      (_, index) => index !== fileIndex
-    );
+  function removeFile(taskNumber, indexToRemove) {
+    const current = taskForms[taskNumber - 1].files;
 
-    updateTask(taskNumber, "files", updated);
+    updateTask(
+      taskNumber,
+      "files",
+      current.filter((_, index) => index !== indexToRemove)
+    );
   }
 
   function validateTasks() {
-    for (const task of TASKS) {
-      const data = tasks[task.number - 1];
+    for (const definition of TASK_DEFINITIONS) {
+      const task = taskForms[definition.number - 1];
 
-      if (task.number === 1 && !isValidUrl(data.task_link)) {
-        return "Please provide a valid LinkedIn offer letter post URL for Task 1.";
+      if (definition.number === 1 && !isValidUrl(task.task_link)) {
+        return "Task 1 requires a valid LinkedIn offer letter post URL.";
       }
 
-      if (task.number === 2 && data.files.length === 0) {
-        return "Please attach at least one file for Task 2.";
+      if (definition.number === 2 && task.files.length === 0) {
+        return "Please upload at least one file for Weekly Task 1.";
       }
 
       if (
-        task.number === 3 &&
-        data.files.length === 0 &&
-        !isValidUrl(data.task_link)
+        definition.number === 3 &&
+        task.files.length === 0 &&
+        !isValidUrl(task.task_link)
       ) {
-        return "For Task 3, upload at least one file or provide a valid project or Figma URL.";
+        return "For Task 3, upload a file or provide a valid project or Figma URL.";
       }
 
-      if (task.number === 4) {
-        if (!data.description.trim()) {
-          return "Please describe what you built for the final task.";
+      if (definition.number === 4) {
+        if (!task.description.trim()) {
+          return "Please describe what you built for the final project.";
         }
 
-        if (data.files.length === 0) {
-          return "Please attach at least one file for the compulsory final task.";
+        if (task.files.length === 0) {
+          return "Please upload at least one file for the compulsory final project.";
         }
 
-        if (!isValidUrl(data.github_link)) {
-          return "Please provide a valid GitHub repository URL for the final task.";
+        if (!isValidUrl(task.github_link)) {
+          return "Please provide a valid GitHub repository URL for the final project.";
         }
 
-        if (!isValidUrl(data.linkedin_link)) {
-          return "Please provide a valid LinkedIn post URL for the final task.";
+        if (!isValidUrl(task.linkedin_link)) {
+          return "Please provide a valid LinkedIn project post URL for the final project.";
         }
       }
 
-      for (const field of ["task_link", "github_link", "linkedin_link"]) {
-        if (data[field]?.trim() && !isValidUrl(data[field])) {
-          return `Please enter a valid URL in Task ${task.number}.`;
+      for (const field of [
+        "task_link",
+        "github_link",
+        "linkedin_link",
+      ]) {
+        if (task[field]?.trim() && !isValidUrl(task[field])) {
+          return `Please enter a valid URL for Task ${definition.number}.`;
         }
       }
     }
 
-    return null;
+    return "";
   }
 
-  async function uploadTaskFiles(taskNumber, files) {
+  async function uploadFiles(taskNumber, files) {
     const uploaded = [];
 
     for (const file of files) {
@@ -380,7 +400,7 @@ export default function InternPortalPage() {
         uploaded.push({
           name: file.name,
           path: file.path,
-          size: file.size,
+          size: file.size || 0,
           type: file.type || "",
         });
         continue;
@@ -389,12 +409,13 @@ export default function InternPortalPage() {
       if (!(file instanceof File)) continue;
 
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const uniquePart =
+      const uniqueId =
         typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-      const path = `${encodeURIComponent(getInternId(session))}/task-${taskNumber}/${uniquePart}-${safeName}`;
+      const folder = encodeURIComponent(session.intern_id);
+      const path = `${folder}/task-${taskNumber}/${uniqueId}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
@@ -417,551 +438,706 @@ export default function InternPortalPage() {
     return uploaded;
   }
 
-  async function handleSubmit(event) {
+  async function submit(event) {
     event.preventDefault();
+    setError("");
     setNotice(null);
 
     const validationError = validateTasks();
 
     if (validationError) {
-      setNotice({ type: "error", text: validationError });
+      setError(validationError);
       return;
     }
 
-    if (!session) {
-      setNotice({
-        type: "error",
-        text: "Your session has expired. Please sign in again.",
-      });
+    if (!session?.intern_id || !session?.email) {
+      setError("Your session has expired. Please sign in again.");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const submissions = [];
+      const preparedSubmissions = [];
 
-      for (const task of TASKS) {
-        const data = tasks[task.number - 1];
-        const uploadedFiles = await uploadTaskFiles(
-          task.number,
-          data.files
+      for (const definition of TASK_DEFINITIONS) {
+        const task = taskForms[definition.number - 1];
+        const files = await uploadFiles(
+          definition.number,
+          task.files
         );
 
-        submissions.push({
-          task_number: task.number,
-          task_title: task.title,
-          description: data.description.trim(),
-          task_link: normalizeUrl(data.task_link),
-          github_link: normalizeUrl(data.github_link),
-          linkedin_link: normalizeUrl(data.linkedin_link),
-          files: uploadedFiles,
+        preparedSubmissions.push({
+          task_number: definition.number,
+          task_title: definition.title,
+          description: task.description.trim(),
+          task_link: normalizeUrl(task.task_link),
+          github_link: normalizeUrl(task.github_link),
+          linkedin_link: normalizeUrl(task.linkedin_link),
+          files,
         });
       }
 
-      const { data, error } = await supabase.rpc(
+      const { data, error: submitError } = await supabase.rpc(
         "portal_submit_intern_tasks",
         {
-          p_intern_id: getInternId(session),
-          p_email: getEmail(session),
-          p_submissions: submissions,
+          p_intern_id: session.intern_id,
+          p_email: session.email,
+          p_submissions: preparedSubmissions,
         }
       );
 
-      if (error) throw error;
+      if (submitError) throw submitError;
 
-      if (!data?.ok) {
+      const result = Array.isArray(data) ? data[0] : data;
+
+      if (!result?.ok) {
         throw new Error(
-          data?.message || "Your task submissions could not be saved."
+          result?.message || "Unable to save your task submissions."
         );
       }
 
-      setNotice({
-        type: "success",
-        text:
-          "Your tasks have been submitted successfully and are awaiting review. Your offer letter will be sent to your registered email address after approval.",
-      });
+      setNotice(
+        "Your tasks have been submitted successfully and are awaiting review. Your offer letter will be sent to your registered email address after approval."
+      );
 
-      await loadPortal(session, true);
-    } catch (error) {
-      setNotice({
-        type: "error",
-        text:
-          error?.message ||
-          "An unexpected error occurred while submitting your tasks.",
-      });
+      await load(session, true);
+    } catch (e) {
+      setError(
+        getErrorMessage(
+          e,
+          "Task submission failed. Please check your connection and try again."
+        )
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
-  function handleLogout() {
+  function logout() {
     sessionStorage.removeItem("internlytic.portal.session");
-    navigate("/portal", { replace: true });
+    navigate("/login", { replace: true });
   }
 
-  const approvedCount = TASKS.filter((task) => {
-    const saved = savedSubmissions.find(
-      (item) => Number(item.task_number) === task.number
+  const approved = TASK_DEFINITIONS.filter((definition) => {
+    const saved = submissions.find(
+      (item) =>
+        Number(item.task_number) === definition.number
     );
-    return (saved?.status || "").toLowerCase() === "approved";
+
+    return String(saved?.status || "").toLowerCase() === "approved";
   }).length;
 
-  const submittedCount = savedSubmissions.length;
-  const progress = Math.round((approvedCount / TASKS.length) * 100);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <Header />
-        <main className="mx-auto flex min-h-[60vh] max-w-5xl items-center justify-center px-4">
-          <div className="text-center">
-            <RefreshCw className="mx-auto mb-3 h-8 w-8 animate-spin text-sky-600" />
-            <p className="text-sm text-slate-600">
-              Loading your internship portal...
-            </p>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
+  const progress =
+    profile?.progress_percent != null
+      ? Math.max(0, Math.min(100, Number(profile.progress_percent) || 0))
+      : Math.round((approved / TASK_DEFINITIONS.length) * 100);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background text-foreground">
       <Header />
 
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-sky-700">
-              Internlytic Technologies
-            </p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
-              Intern Dashboard
-            </h1>
-            <p className="mt-2 max-w-2xl text-slate-600">
-              Submit your internship tasks, upload your work, and track your
-              review status from one place.
-            </p>
-          </div>
+        <div className="rounded-3xl border border-primary/20 bg-gradient-to-br from-secondary via-card to-background p-6 sm:p-10">
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[.18em] text-primary">
+                Internlytic Technologies
+              </p>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => loadPortal(session, true)}
-              disabled={refreshing}
-            >
-              <RefreshCw
-                className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </Button>
+              <h1 className="mt-3 break-words text-3xl font-extrabold text-brand-ink sm:text-4xl">
+                Welcome to Internlytic,{" "}
+                {profile?.full_name ||
+                  profile?.student_name ||
+                  session?.full_name ||
+                  "Intern"}
+                !
+              </h1>
 
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleLogout}
-            >
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
-            </Button>
+              <p className="mt-3 max-w-2xl text-muted-foreground">
+                Manage your internship tasks, submit your work, and track
+                your review progress from one dashboard.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => load(session, true)}
+                disabled={refreshing || loading}
+              >
+                <RefreshCw
+                  size={16}
+                  className={refreshing ? "mr-2 animate-spin" : "mr-2"}
+                />
+                Refresh
+              </Button>
+
+              <Button variant="outline" onClick={logout}>
+                <LogOut size={16} className="mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
+
+        {error && (
+          <div
+            role="alert"
+            className="mt-5 flex items-start gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
+          >
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+            <p className="break-words">{error}</p>
+          </div>
+        )}
 
         {notice && (
           <div
             role="status"
-            className={`mb-6 flex items-start gap-3 rounded-xl border p-4 ${
-              notice.type === "success"
-                ? "border-green-200 bg-green-50 text-green-900"
-                : "border-red-200 bg-red-50 text-red-900"
-            }`}
+            className="mt-5 flex items-start gap-3 rounded-xl border border-green-300 bg-green-50 p-4 text-sm text-green-900"
           >
-            {notice.type === "success" ? (
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-            ) : (
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-            )}
-            <p className="text-sm leading-6">{notice.text}</p>
+            <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+            <p>{notice}</p>
           </div>
         )}
 
-        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Intern ID</p>
-            <p className="mt-2 break-all text-lg font-bold text-slate-900">
-              {profile?.intern_id || getInternId(session) || "Not available"}
-            </p>
+        {loading ? (
+          <div className="py-16 text-center text-muted-foreground">
+            <RefreshCw size={28} className="mx-auto mb-3 animate-spin" />
+            Loading your internship dashboard...
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Internship Track</p>
-            <p className="mt-2 text-lg font-bold text-slate-900">
-              {profile?.track || profile?.program || "Not assigned"}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Tasks Submitted</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {submittedCount} / {TASKS.length}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">Approved Tasks</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">
-              {approvedCount} / {TASKS.length}
-            </p>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-sky-600 transition-all"
-                style={{ width: `${progress}%` }}
+        ) : (
+          <>
+            <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Metric
+                label="Intern ID"
+                value={profile?.intern_id || session?.intern_id || "—"}
               />
-            </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {progress}% approved
-            </p>
-          </div>
-        </section>
 
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-sky-50 p-3 text-sky-700">
-              <Award className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">
-                Welcome, {profile?.full_name || profile?.student_name || "Intern"}
-              </h2>
-              <p className="mt-1 break-all text-sm text-slate-600">
-                Registered email: {profile?.email || getEmail(session)}
-              </p>
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                Complete all four tasks and submit your work for review. The
-                final project is compulsory. Your offer letter will be sent to
-                your registered email address after the required approval.
-              </p>
-            </div>
-          </div>
-        </section>
+              <Metric
+                label="Internship Track"
+                value={profile?.track || profile?.program || "—"}
+              />
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {TASKS.map((task) => {
-            const data = tasks[task.number - 1];
-            const saved = savedSubmissions.find(
-              (item) => Number(item.task_number) === task.number
-            );
+              <Metric
+                label="Approved Tasks"
+                value={`${approved}/${TASK_DEFINITIONS.length}`}
+              />
 
-            return (
-              <section
-                key={task.number}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-              >
-                <div className="border-b border-slate-100 p-5 sm:p-6">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 font-bold text-sky-700">
-                        {String(task.number).padStart(2, "0")}
-                      </div>
+              <Metric
+                label="Completion Progress"
+                value={`${progress}%`}
+              />
+            </section>
 
-                      <div>
-                        <h2 className="text-lg font-bold text-slate-900">
-                          {task.title}
-                          {task.number === 4 && (
-                            <span className="ml-2 inline-block rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
-                              Compulsory
-                            </span>
-                          )}
-                        </h2>
-                        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                          {task.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusClass(
-                        saved?.status
-                      )}`}
-                    >
-                      {saved?.status === "Approved" ? (
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                      ) : (
-                        <Clock3 className="h-3.5 w-3.5" />
-                      )}
-                      {saved?.status || "Not Submitted"}
-                    </span>
-                  </div>
+            <section className="mt-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <div className="rounded-xl bg-secondary p-3 text-primary">
+                  <Award size={24} />
                 </div>
 
-                <div className="space-y-5 p-5 sm:p-6">
-                  {task.number === 4 && (
-                    <div className="space-y-2">
-                      <Label htmlFor="final-description">
-                        Project Description
-                      </Label>
-                      <Textarea
-                        id="final-description"
-                        placeholder="Describe what you built, the technologies you used, and the main features you implemented."
-                        rows={4}
-                        value={data.description}
-                        onChange={(event) =>
-                          updateTask(
-                            task.number,
-                            "description",
-                            event.target.value
-                          )
-                        }
-                      />
-                    </div>
-                  )}
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold">
+                    Internship Overview
+                  </h2>
 
-                  {task.linkLabel && (
-                    <div className="space-y-2">
-                      <Label htmlFor={`task-link-${task.number}`}>
-                        <Link2 className="mr-2 inline h-4 w-4" />
-                        {task.linkLabel}
-                      </Label>
-                      <Input
-                        id={`task-link-${task.number}`}
-                        type="url"
-                        placeholder="https://..."
-                        value={data.task_link}
-                        onChange={(event) =>
-                          updateTask(
-                            task.number,
-                            "task_link",
-                            event.target.value
-                          )
-                        }
-                      />
-                    </div>
-                  )}
+                  <p className="mt-1 break-all text-sm text-muted-foreground">
+                    Registered email: {profile?.email || profile?.student_email || session?.email}
+                  </p>
 
-                  {task.number === 4 && (
-                    <div className="grid gap-5 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="final-github">
-                          <Github className="mr-2 inline h-4 w-4" />
-                          GitHub Repository URL
-                        </Label>
-                        <Input
-                          id="final-github"
-                          type="url"
-                          placeholder="https://github.com/username/repository"
-                          value={data.github_link}
-                          onChange={(event) =>
-                            updateTask(
-                              task.number,
-                              "github_link",
-                              event.target.value
-                            )
-                          }
-                        />
-                      </div>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    Complete and submit all four tasks. Your submissions
+                    will be reviewed by the internship team. Once the
+                    required work is approved, the company can send your
+                    offer letter or other relevant documents to your
+                    registered email address.
+                  </p>
+                </div>
+              </div>
+            </section>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="final-linkedin">
-                          <Linkedin className="mr-2 inline h-4 w-4" />
-                          LinkedIn Project Post URL
-                        </Label>
-                        <Input
-                          id="final-linkedin"
-                          type="url"
-                          placeholder="https://www.linkedin.com/posts/..."
-                          value={data.linkedin_link}
-                          onChange={(event) =>
-                            updateTask(
-                              task.number,
-                              "linkedin_link",
-                              event.target.value
-                            )
-                          }
-                        />
+            <form onSubmit={submit} className="mt-8 space-y-6">
+              {TASK_DEFINITIONS.map((definition) => {
+                const task = taskForms[definition.number - 1];
+
+                const saved = submissions.find(
+                  (item) =>
+                    Number(item.task_number) === definition.number
+                );
+
+                return (
+                  <section
+                    key={definition.number}
+                    className="overflow-hidden rounded-2xl border border-border bg-card"
+                  >
+                    <div className="border-b border-border p-5 sm:p-6">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary font-bold text-primary">
+                            {String(definition.number).padStart(2, "0")}
+                          </div>
+
+                          <div className="min-w-0">
+                            <h2 className="text-lg font-bold">
+                              {definition.title}
+                              {definition.number === 4 && (
+                                <span className="ml-2 inline-block rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">
+                                  Compulsory
+                                </span>
+                              )}
+                            </h2>
+
+                            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                              {definition.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(saved?.status)}`}
+                        >
+                          {String(saved?.status || "").toLowerCase() === "approved" ? (
+                            <CheckCircle2 size={14} />
+                          ) : (
+                            <Clock3 size={14} />
+                          )}
+                          {saved?.status || "Not Submitted"}
+                        </span>
                       </div>
                     </div>
-                  )}
 
-                  {(task.requireFiles ||
-                    task.requireFilesOrLink ||
-                    task.requireFinal) && (
-                    <div className="space-y-3">
-                      <Label>
-                        <FileText className="mr-2 inline h-4 w-4" />
-                        Upload Files
-                      </Label>
+                    <div className="grid gap-5 p-5 sm:p-6">
+                      {definition.requiredFinal && (
+                        <div className="grid gap-2">
+                          <Label htmlFor="final-description">
+                            Project Description
+                          </Label>
 
-                      <label
-                        htmlFor={`task-files-${task.number}`}
-                        className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center transition hover:border-sky-400 hover:bg-sky-50"
-                      >
-                        <UploadCloud className="mb-3 h-8 w-8 text-sky-600" />
-                        <span className="font-semibold text-slate-800">
-                          Choose files to upload
-                        </span>
-                        <span className="mt-1 text-xs leading-5 text-slate-500">
-                          PDF, Word, PowerPoint, ZIP, screenshots, TXT, and
-                          supported project files. Maximum 10 MB per file.
-                        </span>
-                        <span className="mt-2 text-xs text-sky-700">
-                          Multiple files are supported
-                        </span>
-                      </label>
-
-                      <input
-                        id={`task-files-${task.number}`}
-                        type="file"
-                        multiple
-                        accept={ACCEPTED_EXTENSIONS.join(",")}
-                        className="sr-only"
-                        onChange={(event) =>
-                          handleFileSelection(task.number, event)
-                        }
-                      />
-
-                      {data.files.length > 0 && (
-                        <div className="space-y-2">
-                          {data.files.map((file, index) => (
-                            <div
-                              key={`${file.name}-${index}`}
-                              className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
-                            >
-                              <div className="flex min-w-0 items-center gap-3">
-                                <FileText className="h-5 w-5 shrink-0 text-sky-600" />
-                                <div className="min-w-0">
-                                  <p className="break-all text-sm font-medium text-slate-800">
-                                    {file.name}
-                                  </p>
-                                  <p className="text-xs text-slate-500">
-                                    {file.saved
-                                      ? "Previously uploaded"
-                                      : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                aria-label={`Remove ${file.name}`}
-                                onClick={() => removeFile(task.number, index)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
+                          <Textarea
+                            id="final-description"
+                            value={task.description}
+                            onChange={(event) =>
+                              updateTask(
+                                definition.number,
+                                "description",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Describe what you built, the technologies you used, and the main features you implemented."
+                            rows={4}
+                          />
                         </div>
                       )}
-                    </div>
-                  )}
 
-                  {saved?.admin_feedback && (
-                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
-                      <p className="text-sm font-semibold text-sky-900">
-                        Reviewer Feedback
-                      </p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-sky-900">
-                        {saved.admin_feedback}
-                      </p>
-                    </div>
-                  )}
+                      {definition.linkLabel && (
+                        <div className="grid gap-2">
+                          <Label htmlFor={`task-link-${definition.number}`}>
+                            <Link2 size={15} className="mr-2 inline" />
+                            {definition.linkLabel}
+                          </Label>
 
-                  {saved?.submitted_at && (
-                    <p className="text-xs text-slate-500">
-                      Last submitted:{" "}
-                      {new Date(saved.submitted_at).toLocaleString()}
-                    </p>
-                  )}
+                          <Input
+                            id={`task-link-${definition.number}`}
+                            type="url"
+                            value={task.task_link}
+                            onChange={(event) =>
+                              updateTask(
+                                definition.number,
+                                "task_link",
+                                event.target.value
+                              )
+                            }
+                            placeholder={definition.linkPlaceholder}
+                          />
+                        </div>
+                      )}
+
+                      {definition.requiredFinal && (
+                        <div className="grid gap-5 md:grid-cols-2">
+                          <div className="grid gap-2">
+                            <Label htmlFor="final-github">
+                              <Github size={15} className="mr-2 inline" />
+                              GitHub Repository URL
+                            </Label>
+
+                            <Input
+                              id="final-github"
+                              type="url"
+                              value={task.github_link}
+                              onChange={(event) =>
+                                updateTask(
+                                  definition.number,
+                                  "github_link",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="https://github.com/username/repository"
+                            />
+                          </div>
+
+                          <div className="grid gap-2">
+                            <Label htmlFor="final-linkedin">
+                              <Linkedin size={15} className="mr-2 inline" />
+                              LinkedIn Project Post URL
+                            </Label>
+
+                            <Input
+                              id="final-linkedin"
+                              type="url"
+                              value={task.linkedin_link}
+                              onChange={(event) =>
+                                updateTask(
+                                  definition.number,
+                                  "linkedin_link",
+                                  event.target.value
+                                )
+                              }
+                              placeholder="https://www.linkedin.com/posts/..."
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {(definition.requiredFiles ||
+                        definition.allowLinkOrFiles ||
+                        definition.requiredFinal) && (
+                        <div className="grid gap-3">
+                          <Label htmlFor={`task-files-${definition.number}`}>
+                            <FileText size={15} className="mr-2 inline" />
+                            Upload Files
+                          </Label>
+
+                          <label
+                            htmlFor={`task-files-${definition.number}`}
+                            className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary/30 px-4 py-8 text-center transition hover:border-primary hover:bg-secondary/60"
+                          >
+                            <UploadCloud
+                              size={30}
+                              className="mb-3 text-primary"
+                            />
+
+                            <span className="font-semibold">
+                              Choose files to upload
+                            </span>
+
+                            <span className="mt-1 text-xs leading-5 text-muted-foreground">
+                              PDF, Word, PowerPoint, ZIP, screenshots, text
+                              files, and supported project files
+                            </span>
+
+                            <span className="mt-2 text-xs font-medium text-primary">
+                              Multiple files · Maximum 10 MB per file
+                            </span>
+                          </label>
+
+                          <Input
+                            id={`task-files-${definition.number}`}
+                            type="file"
+                            multiple
+                            accept={ACCEPTED_EXTENSIONS.join(",")}
+                            className="sr-only"
+                            onChange={(event) =>
+                              selectFiles(definition.number, event)
+                            }
+                          />
+
+                          {task.files.length > 0 && (
+                            <div className="grid gap-2">
+                              {task.files.map((file, index) => (
+                                <div
+                                  key={`${file.name}-${index}`}
+                                  className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border p-3"
+                                >
+                                  <div className="flex min-w-0 items-center gap-3">
+                                    <FileText
+                                      size={20}
+                                      className="shrink-0 text-primary"
+                                    />
+
+                                    <div className="min-w-0">
+                                      <p className="break-all text-sm font-medium">
+                                        {file.name}
+                                      </p>
+
+                                      <p className="text-xs text-muted-foreground">
+                                        {file.saved
+                                          ? "Previously uploaded"
+                                          : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Remove ${file.name}`}
+                                    onClick={() =>
+                                      removeFile(definition.number, index)
+                                    }
+                                  >
+                                    <X size={16} />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {saved?.admin_feedback && (
+                        <div className="rounded-xl border border-primary/20 bg-secondary/50 p-4">
+                          <p className="text-sm font-bold">
+                            Reviewer Feedback
+                          </p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                            {saved.admin_feedback}
+                          </p>
+                        </div>
+                      )}
+
+                      {saved?.submitted_at && (
+                        <p className="text-xs text-muted-foreground">
+                          Last submitted:{" "}
+                          {new Date(saved.submitted_at).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                );
+              })}
+
+              <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                <div>
+                  <h2 className="font-bold">
+                    Ready to submit your tasks?
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    Check your links and attachments before submitting.
+                    Resubmission sends the tasks for review again.
+                  </p>
                 </div>
-              </section>
-            );
-          })}
 
-          <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Ready to submit your work?
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Review your links and files before submitting all four tasks.
-                Submitting again updates your existing submissions and sends
-                them for review again.
-              </p>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="min-h-12 shrink-0 bg-sky-600 px-6 text-white hover:bg-sky-700"
-            >
-              {submitting ? (
-                <>
-                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting Tasks...
-                </>
-              ) : (
-                <>
-                  <UploadCloud className="mr-2 h-4 w-4" />
-                  Submit Your Tasks
-                </>
-              )}
-            </Button>
-          </div>
-        </form>
-
-        {publishedTasks.length > 0 && (
-          <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-lg font-bold text-slate-900">
-              Published Internship Tasks
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Additional instructions published by your internship team.
-            </p>
-
-            <div className="mt-4 space-y-3">
-              {publishedTasks.map((task, index) => (
-                <div
-                  key={task.id || task.task_id || index}
-                  className="rounded-xl border border-slate-200 p-4"
+                <Button
+                  type="submit"
+                  variant="brand"
+                  size="lg"
+                  className="w-full shrink-0 sm:w-auto"
+                  disabled={submitting}
                 >
-                  <h3 className="font-semibold text-slate-900">
-                    {task.title || task.task_title || `Task ${index + 1}`}
-                  </h3>
-                  {(task.description || task.instructions) && (
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">
-                      {task.description || task.instructions}
-                    </p>
+                  {submitting ? (
+                    <>
+                      <RefreshCw
+                        size={16}
+                        className="mr-2 animate-spin"
+                      />
+                      Submitting Tasks...
+                    </>
+                  ) : (
+                    <>
+                      Submit Your Tasks
+                      <UploadCloud size={16} className="ml-2" />
+                    </>
                   )}
-                  {task.due_date && (
-                    <p className="mt-2 text-xs text-slate-500">
-                      Due date: {task.due_date}
-                    </p>
-                  )}
-                  {task.task_link && (
-                    <a
-                      href={task.task_link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-sky-700 hover:underline"
-                    >
-                      Open task instructions
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+                </Button>
+              </section>
+            </form>
 
-        <p className="mt-8 text-center text-xs leading-5 text-slate-500">
-          Internlytic Technologies · Internship Portal · Keep your registered
-          email address active for official updates.
-        </p>
+            <section className="mt-8 rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <div>
+                <h2 className="text-xl font-bold">
+                  Published Internship Tasks
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Additional instructions published by your internship team.
+                </p>
+              </div>
+
+              {publishedTasks.length === 0 ? (
+                <p className="mt-5 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                  No additional instructions have been published yet.
+                </p>
+              ) : (
+                <div className="mt-5 grid gap-3">
+                  {publishedTasks.map((task, index) => (
+                    <article
+                      key={task.id || task.task_id || index}
+                      className="rounded-xl border border-border p-4"
+                    >
+                      <h3 className="font-bold">
+                        {task.title ||
+                          task.task_title ||
+                          `Published Task ${index + 1}`}
+                      </h3>
+
+                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                        {task.description || task.instructions || ""}
+                      </p>
+
+                      {(task.due_date || task.deadline) && (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Deadline: {task.due_date || task.deadline}
+                        </p>
+                      )}
+
+                      {task.task_link && (
+                        <a
+                          href={task.task_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+                        >
+                          Open Task Instructions
+                          <ExternalLink size={15} />
+                        </a>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="mt-8 rounded-2xl border border-border bg-card p-5 sm:p-6">
+              <h2 className="text-xl font-bold">My Task Submissions</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review the latest status and feedback for each submitted task.
+              </p>
+
+              {submissions.length === 0 ? (
+                <p className="mt-5 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
+                  You have not submitted any tasks yet.
+                </p>
+              ) : (
+                <div className="mt-5 grid gap-3">
+                  {submissions.map((item) => {
+                    const definition = TASK_DEFINITIONS.find(
+                      (task) =>
+                        task.number === Number(item.task_number)
+                    );
+
+                    return (
+                      <article
+                        key={item.id || item.task_number}
+                        className="rounded-xl border border-border p-4"
+                      >
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0">
+                            <h3 className="font-bold">
+                              {definition?.title ||
+                                item.task_title ||
+                                `Task ${item.task_number}`}
+                            </h3>
+
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Submitted:{" "}
+                              {item.submitted_at
+                                ? new Date(
+                                    item.submitted_at
+                                  ).toLocaleString()
+                                : "Date unavailable"}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(item.status)}`}
+                          >
+                            {item.status || "Under Review"}
+                          </span>
+                        </div>
+
+                        {item.description && (
+                          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                            {item.description}
+                          </p>
+                        )}
+
+                        <div className="mt-3 flex flex-wrap gap-3">
+                          {item.task_link && (
+                            <a
+                              href={normalizeUrl(item.task_link)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                            >
+                              Open Task Link
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+
+                          {item.github_link && (
+                            <a
+                              href={normalizeUrl(item.github_link)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                            >
+                              GitHub Repository
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+
+                          {item.linkedin_link && (
+                            <a
+                              href={normalizeUrl(item.linkedin_link)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                            >
+                              LinkedIn Post
+                              <ExternalLink size={14} />
+                            </a>
+                          )}
+                        </div>
+
+                        {Array.isArray(item.files) &&
+                          item.files.length > 0 && (
+                            <div className="mt-4 border-t border-border pt-3">
+                              <p className="text-xs font-semibold text-muted-foreground">
+                                Attached Files
+                              </p>
+
+                              <div className="mt-2 grid gap-2">
+                                {item.files.map((file, index) => (
+                                  <div
+                                    key={`${file.name}-${index}`}
+                                    className="flex items-start gap-2 text-sm"
+                                  >
+                                    <FileText
+                                      size={15}
+                                      className="mt-0.5 shrink-0 text-primary"
+                                    />
+                                    <span className="break-all">
+                                      {file.name}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                        {item.admin_feedback && (
+                          <div className="mt-4 rounded-lg bg-secondary p-3">
+                            <p className="text-sm font-semibold">
+                              Reviewer Feedback
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                              {item.admin_feedback}
+                            </p>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <p className="mt-8 text-center text-xs leading-5 text-muted-foreground">
+              Internlytic Technologies · Internship Portal · Keep your
+              registered email address active for official updates.
+            </p>
+          </>
+        )}
       </main>
 
       <Footer />
