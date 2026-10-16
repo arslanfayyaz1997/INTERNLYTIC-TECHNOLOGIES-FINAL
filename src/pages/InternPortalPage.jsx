@@ -14,6 +14,7 @@ import {
   Linkedin,
   X,
   AlertCircle,
+  FolderOpen,
 } from "lucide-react";
 
 import { Header, Footer } from "@/components/layout";
@@ -25,25 +26,6 @@ import { supabase } from "@/supabaseClient";
 
 const BUCKET = "intern-task-files";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-const TASK_DEFINITIONS = [
-  {
-    number: 1,
-    title: "Week 1 Task (LinkedIn Offer Letter Post link) ",
-    description:
-      "Share the URL of your LinkedIn post announcing your internship offer letter.",
-    linkLabel: "LinkedIn Post URL",
-    linkPlaceholder: "https://www.linkedin.com/posts/...",
-    requiredLink: true,
-  },
-  {
-    number: 4,
-    title: " All Weeks Task (Project Submission)",
-    description:
-      "Describe your project, upload your work, and provide your GitHub repository and LinkedIn project post.",
-    requiredFinal: true,
-  },
-];
 
 const ACCEPTED_EXTENSIONS = [
   ".pdf",
@@ -59,6 +41,13 @@ const ACCEPTED_EXTENSIONS = [
   ".fig",
 ];
 
+const TASK_TITLES = [
+  "Week 1 — Task 1: Offer Letter LinkedIn Post",
+  "Week 2 — Task 2: Weekly Task Submission",
+  "Week 3 — Task 3: Project Links and Description",
+  "Week 4 — Task 4: Final Project Submission",
+];
+
 function readSession() {
   try {
     return JSON.parse(
@@ -69,25 +58,8 @@ function readSession() {
   }
 }
 
-function emptyTask() {
-  return {
-    description: "",
-    task_link: "",
-    github_link: "",
-    linkedin_link: "",
-    files: [],
-  };
-}
-
-function getErrorMessage(error, fallback) {
-  if (!error) return fallback;
-  if (typeof error === "string") return error;
-  return error.message || fallback;
-}
-
 function normalizeUrl(value) {
   const input = (value || "").trim();
-
   if (!input) return "";
 
   return /^https?:\/\//i.test(input)
@@ -95,15 +67,33 @@ function normalizeUrl(value) {
     : `https://${input}`;
 }
 
-function isValidUrl(value) {
+function validateUrl(value, allowedDomains = []) {
   if (!value?.trim()) return false;
 
   try {
-    const parsed = new URL(normalizeUrl(value));
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
+    const url = new URL(normalizeUrl(value));
+
+    if (!["https:", "http:"].includes(url.protocol)) return false;
+
+    if (allowedDomains.length > 0) {
+      const host = url.hostname.toLowerCase();
+
+      return allowedDomains.some(
+        (domain) =>
+          host === domain || host.endsWith(`.${domain}`)
+      );
+    }
+
+    return true;
   } catch {
     return false;
   }
+}
+
+function getErrorMessage(error, fallback) {
+  if (!error) return fallback;
+  if (typeof error === "string") return error;
+  return error.message || fallback;
 }
 
 function statusStyle(status) {
@@ -137,16 +127,21 @@ export default function InternPortalPage() {
 
   const [session, setSession] = useState(() => readSession());
   const [profile, setProfile] = useState(null);
-  const [taskForms, setTaskForms] = useState(() =>
-    TASK_DEFINITIONS.map(() => emptyTask())
-  );
   const [publishedTasks, setPublishedTasks] = useState([]);
   const [submissions, setSubmissions] = useState([]);
+
+  const [offerLink, setOfferLink] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
+  const [figmaLink, setFigmaLink] = useState("");
+  const [githubLink, setGithubLink] = useState("");
+  const [files, setFiles] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState(null);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const currentSession = readSession();
@@ -164,7 +159,6 @@ export default function InternPortalPage() {
     setSession(currentSession);
     load(currentSession);
 
-    // Load the current intern's portal data on entry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -188,19 +182,22 @@ export default function InternPortalPage() {
 
       if (loginError) throw loginError;
 
-      const result = Array.isArray(loginData)
+      const loginResult = Array.isArray(loginData)
         ? loginData[0]
         : loginData;
 
-      if (!result?.ok || !result.intern) {
+      if (!loginResult?.ok || !loginResult.intern) {
         throw new Error(
-          result?.message || "Unable to load your internship profile."
+          loginResult?.message ||
+            "Unable to load your internship profile."
         );
       }
 
-      setProfile(result.intern);
+      setProfile(loginResult.intern);
       setPublishedTasks(
-        Array.isArray(result.tasks) ? result.tasks : []
+        Array.isArray(loginResult.tasks)
+          ? loginResult.tasks
+          : []
       );
 
       const { data: submissionData, error: submissionError } =
@@ -222,35 +219,74 @@ export default function InternPortalPage() {
 
         setSubmissions(saved);
 
-        setTaskForms((previous) =>
-          TASK_DEFINITIONS.map((definition) => {
-            const existing = saved.find(
-              (item) =>
-                Number(item.task_number) === definition.number
-            );
-
-            if (!existing) {
-              return previous[definition.number - 1];
-            }
-
-            return {
-              description: existing.description || "",
-              task_link: existing.task_link || "",
-              github_link: existing.github_link || "",
-              linkedin_link: existing.linkedin_link || "",
-              files: Array.isArray(existing.files)
-                ? existing.files.map((file) => ({
-                    ...file,
-                    saved: true,
-                  }))
-                : [],
-            };
-          })
+        const first = saved.find(
+          (item) => Number(item.task_number) === 1
         );
+        const second = saved.find(
+          (item) => Number(item.task_number) === 2
+        );
+        const third = saved.find(
+          (item) => Number(item.task_number) === 3
+        );
+        const fourth = saved.find(
+          (item) => Number(item.task_number) === 4
+        );
+
+        if (first?.task_link) setOfferLink(first.task_link);
+
+        const projectRecord = fourth || third || second;
+
+        if (projectRecord) {
+          const description = projectRecord.description || "";
+
+          // Restore project name and description saved by this form.
+          const nameMatch = description.match(/^Project name:\s*(.+)$/m);
+          const detailsMatch = description.match(
+            /^Project description:\s*([\s\S]*?)(?=\n\nFigma link:|\n\nGitHub repository:|$)/m
+          );
+
+          if (nameMatch) setProjectName(nameMatch[1].trim());
+          if (detailsMatch) {
+            setProjectDescription(detailsMatch[1].trim());
+          }
+
+          if (projectRecord.task_link?.includes("figma.com")) {
+            setFigmaLink(projectRecord.task_link);
+          } else if (third?.task_link?.includes("figma.com")) {
+            setFigmaLink(third.task_link);
+          }
+
+          if (fourth?.github_link) {
+            setGithubLink(fourth.github_link);
+          } else if (third?.github_link) {
+            setGithubLink(third.github_link);
+          }
+        }
+
+        const savedFiles = [
+          ...(Array.isArray(second?.files) ? second.files : []),
+          ...(Array.isArray(fourth?.files) ? fourth.files : []),
+        ];
+
+        const uniqueFiles = savedFiles.filter(
+          (file, index, array) =>
+            array.findIndex(
+              (item) => item.path && item.path === file.path
+            ) === index
+        );
+
+        if (uniqueFiles.length) {
+          setFiles(
+            uniqueFiles.map((file) => ({
+              ...file,
+              saved: true,
+            }))
+          );
+        }
       } else if (submissionResult && !submissionResult.ok) {
         throw new Error(
           submissionResult.message ||
-            "Unable to retrieve your task submissions."
+            "Unable to retrieve your submissions."
         );
       }
     } catch (e) {
@@ -263,23 +299,12 @@ export default function InternPortalPage() {
     }
   }
 
-  function updateTask(taskNumber, field, value) {
-    setTaskForms((previous) =>
-      previous.map((task, index) =>
-        index === taskNumber - 1
-          ? { ...task, [field]: value }
-          : task
-      )
-    );
-  }
-
-  function selectFiles(taskNumber, event) {
+  function selectFiles(event) {
     const selected = Array.from(event.target.files || []);
     event.target.value = "";
 
     if (!selected.length) return;
 
-    const current = taskForms[taskNumber - 1].files;
     const accepted = [];
     const rejected = [];
 
@@ -296,7 +321,7 @@ export default function InternPortalPage() {
         continue;
       }
 
-      const duplicate = [...current, ...accepted].some(
+      const duplicate = [...files, ...accepted].some(
         (item) =>
           item.name === file.name &&
           item.size === file.size
@@ -305,78 +330,45 @@ export default function InternPortalPage() {
       if (!duplicate) accepted.push(file);
     }
 
-    if (rejected.length) {
-      setError(rejected.join(" "));
-    } else {
-      setError("");
-    }
-
-    updateTask(taskNumber, "files", [...current, ...accepted]);
+    setError(rejected.join(" "));
+    setFiles((previous) => [...previous, ...accepted]);
   }
 
-  function removeFile(taskNumber, indexToRemove) {
-    const current = taskForms[taskNumber - 1].files;
-
-    updateTask(
-      taskNumber,
-      "files",
-      current.filter((_, index) => index !== indexToRemove)
+  function removeFile(indexToRemove) {
+    setFiles((previous) =>
+      previous.filter((_, index) => index !== indexToRemove)
     );
   }
 
-  function validateTasks() {
-    for (const definition of TASK_DEFINITIONS) {
-      const task = taskForms[definition.number - 1];
+  function validateForm() {
+    if (!validateUrl(offerLink, ["linkedin.com"])) {
+      return "Please enter a valid LinkedIn URL for your existing offer letter post.";
+    }
 
-      if (definition.number === 1 && !isValidUrl(task.task_link)) {
-        return "Task 1 requires a valid LinkedIn offer letter post URL.";
-      }
+    if (!projectName.trim()) {
+      return "Please enter your project name.";
+    }
 
-      if (definition.number === 2 && task.files.length === 0) {
-        return "Please upload at least one file for Weekly Task 1.";
-      }
+    if (!projectDescription.trim()) {
+      return "Please describe what you built for your project.";
+    }
 
-      if (
-        definition.number === 3 &&
-        task.files.length === 0 &&
-        !isValidUrl(task.task_link)
-      ) {
-        return "For Task 3, upload a file or provide a valid project or Figma URL.";
-      }
+    if (!validateUrl(figmaLink, ["figma.com"])) {
+      return "Please enter a valid Figma URL from figma.com.";
+    }
 
-      if (definition.number === 4) {
-        if (!task.description.trim()) {
-          return "Please describe what you built for the final project.";
-        }
+    if (!validateUrl(githubLink, ["github.com"])) {
+      return "Please enter a valid GitHub repository URL from github.com.";
+    }
 
-        if (task.files.length === 0) {
-          return "Please upload at least one file for the compulsory final project.";
-        }
-
-        if (!isValidUrl(task.github_link)) {
-          return "Please provide a valid GitHub repository URL for the final project.";
-        }
-
-        if (!isValidUrl(task.linkedin_link)) {
-          return "Please provide a valid LinkedIn project post URL for the final project.";
-        }
-      }
-
-      for (const field of [
-        "task_link",
-        "github_link",
-        "linkedin_link",
-      ]) {
-        if (task[field]?.trim() && !isValidUrl(task[field])) {
-          return `Please enter a valid URL for Task ${definition.number}.`;
-        }
-      }
+    if (!files.length) {
+      return "Please upload at least one project file.";
     }
 
     return "";
   }
 
-  async function uploadFiles(taskNumber, files) {
+  async function uploadFiles() {
     const uploaded = [];
 
     for (const file of files) {
@@ -399,7 +391,7 @@ export default function InternPortalPage() {
           : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
       const folder = encodeURIComponent(session.intern_id);
-      const path = `${folder}/task-${taskNumber}/${uniqueId}-${safeName}`;
+      const path = `${folder}/final-project/${uniqueId}-${safeName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(BUCKET)
@@ -425,9 +417,9 @@ export default function InternPortalPage() {
   async function submit(event) {
     event.preventDefault();
     setError("");
-    setNotice(null);
+    setNotice("");
 
-    const validationError = validateTasks();
+    const validationError = validateForm();
 
     if (validationError) {
       setError(validationError);
@@ -442,32 +434,58 @@ export default function InternPortalPage() {
     setSubmitting(true);
 
     try {
-      const preparedSubmissions = [];
+      const uploadedFiles = await uploadFiles();
 
-      for (const definition of TASK_DEFINITIONS) {
-        const task = taskForms[definition.number - 1];
-        const files = await uploadFiles(
-          definition.number,
-          task.files
-        );
+      const projectDetails =
+        `Project name: ${projectName.trim()}\n\n` +
+        `Project description: ${projectDescription.trim()}`;
 
-        preparedSubmissions.push({
-          task_number: definition.number,
-          task_title: definition.title,
-          description: task.description.trim(),
-          task_link: normalizeUrl(task.task_link),
-          github_link: normalizeUrl(task.github_link),
-          linkedin_link: normalizeUrl(task.linkedin_link),
-          files,
-        });
-      }
+      const submissionsToSave = [
+        {
+          task_number: 1,
+          task_title: TASK_TITLES[0],
+          description:
+            "Link to the LinkedIn post where the intern already shared their offer letter.",
+          task_link: normalizeUrl(offerLink),
+          github_link: "",
+          linkedin_link: normalizeUrl(offerLink),
+          files: [],
+        },
+        {
+          task_number: 2,
+          task_title: TASK_TITLES[1],
+          description: projectDetails,
+          task_link: normalizeUrl(figmaLink),
+          github_link: "",
+          linkedin_link: "",
+          files: uploadedFiles,
+        },
+        {
+          task_number: 3,
+          task_title: TASK_TITLES[2],
+          description: projectDetails,
+          task_link: normalizeUrl(figmaLink),
+          github_link: normalizeUrl(githubLink),
+          linkedin_link: "",
+          files: [],
+        },
+        {
+          task_number: 4,
+          task_title: TASK_TITLES[3],
+          description: projectDetails,
+          task_link: normalizeUrl(figmaLink),
+          github_link: normalizeUrl(githubLink),
+          linkedin_link: "",
+          files: uploadedFiles,
+        },
+      ];
 
       const { data, error: submitError } = await supabase.rpc(
         "portal_submit_intern_tasks",
         {
           p_intern_id: session.intern_id,
           p_email: session.email,
-          p_submissions: preparedSubmissions,
+          p_submissions: submissionsToSave,
         }
       );
 
@@ -482,7 +500,7 @@ export default function InternPortalPage() {
       }
 
       setNotice(
-        "Your tasks have been submitted successfully and are awaiting review. Your offer letter will be sent to your registered email address after approval."
+        "Your submission has been saved successfully and is awaiting review."
       );
 
       await load(session, true);
@@ -490,7 +508,7 @@ export default function InternPortalPage() {
       setError(
         getErrorMessage(
           e,
-          "Task submission failed. Please check your connection and try again."
+          "Submission failed. Please check your connection and try again."
         )
       );
     } finally {
@@ -503,10 +521,9 @@ export default function InternPortalPage() {
     navigate("/login", { replace: true });
   }
 
-  const approved = TASK_DEFINITIONS.filter((definition) => {
+  const approved = [1, 2, 3, 4].filter((number) => {
     const saved = submissions.find(
-      (item) =>
-        Number(item.task_number) === definition.number
+      (item) => Number(item.task_number) === number
     );
 
     return String(saved?.status || "").toLowerCase() === "approved";
@@ -515,7 +532,7 @@ export default function InternPortalPage() {
   const progress =
     profile?.progress_percent != null
       ? Math.max(0, Math.min(100, Number(profile.progress_percent) || 0))
-      : Math.round((approved / TASK_DEFINITIONS.length) * 100);
+      : Math.round((approved / 4) * 100);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -539,8 +556,8 @@ export default function InternPortalPage() {
               </h1>
 
               <p className="mt-3 max-w-2xl text-muted-foreground">
-                Manage your internship tasks, submit your work, and track
-                your review progress from one dashboard.
+                Submit your offer letter post and project work, and track
+                your internship review progress from one dashboard.
               </p>
             </div>
 
@@ -597,21 +614,12 @@ export default function InternPortalPage() {
                 label="Intern ID"
                 value={profile?.intern_id || session?.intern_id || "—"}
               />
-
               <Metric
                 label="Internship Track"
                 value={profile?.track || profile?.program || "—"}
               />
-
-              <Metric
-                label="Approved Tasks"
-                value={`${approved}/${TASK_DEFINITIONS.length}`}
-              />
-
-              <Metric
-                label="Completion Progress"
-                value={`${progress}%`}
-              />
+              <Metric label="Approved Tasks" value={`${approved}/4`} />
+              <Metric label="Completion Progress" value={`${progress}%`} />
             </section>
 
             <section className="mt-6 rounded-2xl border border-border bg-card p-5 sm:p-6">
@@ -621,284 +629,227 @@ export default function InternPortalPage() {
                 </div>
 
                 <div className="min-w-0">
-                  <h2 className="text-lg font-bold">
-                    Internship Overview
-                  </h2>
-
+                  <h2 className="text-lg font-bold">Internship Overview</h2>
                   <p className="mt-1 break-all text-sm text-muted-foreground">
-                    Registered email: {profile?.email || profile?.student_email || session?.email}
+                    Registered email:{" "}
+                    {profile?.email ||
+                      profile?.student_email ||
+                      session?.email}
                   </p>
-
                   <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                    Complete and submit all four tasks. Your submissions
-                    will be reviewed by the internship team. Once the
-                    required work is approved, the company can send your
-                    offer letter or other relevant documents to your
-                    registered email address.
+                    Submit your existing offer letter LinkedIn post and
+                    project information below. Your submission will be
+                    reviewed by the internship team.
                   </p>
                 </div>
               </div>
             </section>
 
             <form onSubmit={submit} className="mt-8 space-y-6">
-              {TASK_DEFINITIONS.map((definition) => {
-                const task = taskForms[definition.number - 1];
-
-                const saved = submissions.find(
-                  (item) =>
-                    Number(item.task_number) === definition.number
-                );
-
-                return (
-                  <section
-                    key={definition.number}
-                    className="overflow-hidden rounded-2xl border border-border bg-card"
-                  >
-                    <div className="border-b border-border p-5 sm:p-6">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary font-bold text-primary">
-                            {String(definition.number).padStart(2, "0")}
-                          </div>
-
-                          <div className="min-w-0">
-                            <h2 className="text-lg font-bold">
-                              {definition.title}
-                              {definition.number === 4 && (
-                                <span className="ml-2 inline-block rounded-full bg-red-100 px-2 py-1 text-xs font-semibold text-red-800">
-                                  Compulsory
-                                </span>
-                              )}
-                            </h2>
-
-                            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                              {definition.description}
-                            </p>
-                          </div>
-                        </div>
-
-                        <span
-                          className={`inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(saved?.status)}`}
-                        >
-                          {String(saved?.status || "").toLowerCase() === "approved" ? (
-                            <CheckCircle2 size={14} />
-                          ) : (
-                            <Clock3 size={14} />
-                          )}
-                          {saved?.status || "Not Submitted"}
-                        </span>
-                      </div>
+              <section className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="border-b border-border p-5 sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary font-bold text-primary">
+                      01
                     </div>
+                    <div>
+                      <h2 className="text-lg font-bold">
+                        Week 1 — Task 1: Offer Letter LinkedIn Post
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Paste the link to the LinkedIn post where you have
+                        already shared your Internlytic Technologies offer
+                        letter. Do not upload the offer letter again.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-                    <div className="grid gap-5 p-5 sm:p-6">
-                      {definition.requiredFinal && (
-                        <div className="grid gap-2">
-                          <Label htmlFor="final-description">
-                            Project Description
-                          </Label>
+                <div className="grid gap-2 p-5 sm:p-6">
+                  <Label htmlFor="offer-link">
+                    <Linkedin size={15} className="mr-2 inline" />
+                    Your Uploaded Offer Letter LinkedIn Post Link
+                  </Label>
+                  <Input
+                    id="offer-link"
+                    type="url"
+                    required
+                    value={offerLink}
+                    onChange={(event) => setOfferLink(event.target.value)}
+                    placeholder="https://www.linkedin.com/posts/..."
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    A valid LinkedIn URL is required.
+                  </p>
+                </div>
+              </section>
 
-                          <Textarea
-                            id="final-description"
-                            value={task.description}
-                            onChange={(event) =>
-                              updateTask(
-                                definition.number,
-                                "description",
-                                event.target.value
-                              )
-                            }
-                            placeholder="Describe what you built, the technologies you used, and the main features you implemented."
-                            rows={4}
-                          />
-                        </div>
-                      )}
+              <section className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="border-b border-border p-5 sm:p-6">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary font-bold text-primary">
+                      02
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold">
+                        Upload Your Week 2, Week 3 and Final Project Files Here
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Enter your project details and upload the files for
+                        your weekly work and final project.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-                      {definition.linkLabel && (
-                        <div className="grid gap-2">
-                          <Label htmlFor={`task-link-${definition.number}`}>
-                            <Link2 size={15} className="mr-2 inline" />
-                            {definition.linkLabel}
-                          </Label>
+                <div className="grid gap-5 p-5 sm:p-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="project-name">Project Name</Label>
+                    <Input
+                      id="project-name"
+                      required
+                      value={projectName}
+                      onChange={(event) => setProjectName(event.target.value)}
+                      placeholder="Enter your project name"
+                    />
+                  </div>
 
-                          <Input
-                            id={`task-link-${definition.number}`}
-                            type="url"
-                            value={task.task_link}
-                            onChange={(event) =>
-                              updateTask(
-                                definition.number,
-                                "task_link",
-                                event.target.value
-                              )
-                            }
-                            placeholder={definition.linkPlaceholder}
-                          />
-                        </div>
-                      )}
+                  <div className="grid gap-2">
+                    <Label htmlFor="project-description">
+                      Project Description — What Did You Build?
+                    </Label>
+                    <Textarea
+                      id="project-description"
+                      required
+                      value={projectDescription}
+                      onChange={(event) =>
+                        setProjectDescription(event.target.value)
+                      }
+                      placeholder="Describe what you built, the technologies you used, and the main features you implemented."
+                      rows={5}
+                    />
+                  </div>
 
-                      {definition.requiredFinal && (
-                        <div className="grid gap-5 md:grid-cols-2">
-                          <div className="grid gap-2">
-                            <Label htmlFor="final-github">
-                              <Github size={15} className="mr-2 inline" />
-                              GitHub Repository URL
-                            </Label>
+                  <div className="grid gap-2">
+                    <Label htmlFor="figma-link">
+                      <Link2 size={15} className="mr-2 inline" />
+                      Figma Link
+                    </Label>
+                    <Input
+                      id="figma-link"
+                      type="url"
+                      required
+                      value={figmaLink}
+                      onChange={(event) => setFigmaLink(event.target.value)}
+                      placeholder="https://www.figma.com/design/..."
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter a link from figma.com. Invalid links will be
+                      rejected.
+                    </p>
+                  </div>
 
-                            <Input
-                              id="final-github"
-                              type="url"
-                              value={task.github_link}
-                              onChange={(event) =>
-                                updateTask(
-                                  definition.number,
-                                  "github_link",
-                                  event.target.value
-                                )
-                              }
-                              placeholder="https://github.com/username/repository"
-                            />
-                          </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="github-link">
+                      <Github size={15} className="mr-2 inline" />
+                      GitHub Repository Link
+                    </Label>
+                    <Input
+                      id="github-link"
+                      type="url"
+                      required
+                      value={githubLink}
+                      onChange={(event) => setGithubLink(event.target.value)}
+                      placeholder="https://github.com/username/repository"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter a repository link from github.com. Invalid links
+                      will be rejected.
+                    </p>
+                  </div>
 
-                          <div className="grid gap-2">
-                            <Label htmlFor="final-linkedin">
-                              <Linkedin size={15} className="mr-2 inline" />
-                              LinkedIn Project Post URL
-                            </Label>
+                  <div className="grid gap-3">
+                    <Label htmlFor="project-files">
+                      <FolderOpen size={15} className="mr-2 inline" />
+                      Upload Files
+                    </Label>
 
-                            <Input
-                              id="final-linkedin"
-                              type="url"
-                              value={task.linkedin_link}
-                              onChange={(event) =>
-                                updateTask(
-                                  definition.number,
-                                  "linkedin_link",
-                                  event.target.value
-                                )
-                              }
-                              placeholder="https://www.linkedin.com/posts/..."
-                            />
-                          </div>
-                        </div>
-                      )}
+                    <label
+                      htmlFor="project-files"
+                      className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary/30 px-4 py-8 text-center transition hover:border-primary hover:bg-secondary/60"
+                    >
+                      <UploadCloud
+                        size={32}
+                        className="mb-3 text-primary"
+                      />
+                      <span className="font-semibold">
+                        Choose Project Files
+                      </span>
+                      <span className="mt-2 text-xs leading-5 text-muted-foreground">
+                        PDF, Word, PowerPoint, ZIP, PNG, JPG, TXT and Figma
+                        files
+                      </span>
+                      <span className="mt-2 text-xs font-medium text-primary">
+                        Multiple files · Maximum 10 MB per file
+                      </span>
+                    </label>
 
-                      {(definition.requiredFiles ||
-                        definition.allowLinkOrFiles ||
-                        definition.requiredFinal) && (
-                        <div className="grid gap-3">
-                          <Label htmlFor={`task-files-${definition.number}`}>
-                            <FileText size={15} className="mr-2 inline" />
-                            Upload Files
-                          </Label>
+                    <Input
+                      id="project-files"
+                      type="file"
+                      multiple
+                      accept={ACCEPTED_EXTENSIONS.join(",")}
+                      className="sr-only"
+                      onChange={selectFiles}
+                    />
 
-                          <label
-                            htmlFor={`task-files-${definition.number}`}
-                            className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-secondary/30 px-4 py-8 text-center transition hover:border-primary hover:bg-secondary/60"
+                    {files.length > 0 && (
+                      <div className="grid gap-2">
+                        {files.map((file, index) => (
+                          <div
+                            key={`${file.name}-${index}`}
+                            className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border p-3"
                           >
-                            <UploadCloud
-                              size={30}
-                              className="mb-3 text-primary"
-                            />
-
-                            <span className="font-semibold">
-                              Choose files to upload
-                            </span>
-
-                            <span className="mt-1 text-xs leading-5 text-muted-foreground">
-                              PDF, Word, PowerPoint, ZIP, screenshots, text
-                              files, and supported project files
-                            </span>
-
-                            <span className="mt-2 text-xs font-medium text-primary">
-                              Multiple files · Maximum 10 MB per file
-                            </span>
-                          </label>
-
-                          <Input
-                            id={`task-files-${definition.number}`}
-                            type="file"
-                            multiple
-                            accept={ACCEPTED_EXTENSIONS.join(",")}
-                            className="sr-only"
-                            onChange={(event) =>
-                              selectFiles(definition.number, event)
-                            }
-                          />
-
-                          {task.files.length > 0 && (
-                            <div className="grid gap-2">
-                              {task.files.map((file, index) => (
-                                <div
-                                  key={`${file.name}-${index}`}
-                                  className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-border p-3"
-                                >
-                                  <div className="flex min-w-0 items-center gap-3">
-                                    <FileText
-                                      size={20}
-                                      className="shrink-0 text-primary"
-                                    />
-
-                                    <div className="min-w-0">
-                                      <p className="break-all text-sm font-medium">
-                                        {file.name}
-                                      </p>
-
-                                      <p className="text-xs text-muted-foreground">
-                                        {file.saved
-                                          ? "Previously uploaded"
-                                          : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label={`Remove ${file.name}`}
-                                    onClick={() =>
-                                      removeFile(definition.number, index)
-                                    }
-                                  >
-                                    <X size={16} />
-                                  </Button>
-                                </div>
-                              ))}
+                            <div className="flex min-w-0 items-center gap-3">
+                              <FileText
+                                size={20}
+                                className="shrink-0 text-primary"
+                              />
+                              <div className="min-w-0">
+                                <p className="break-all text-sm font-medium">
+                                  {file.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {file.saved
+                                    ? "Previously uploaded"
+                                    : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
+                                </p>
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      )}
 
-                      {saved?.admin_feedback && (
-                        <div className="rounded-xl border border-primary/20 bg-secondary/50 p-4">
-                          <p className="text-sm font-bold">
-                            Reviewer Feedback
-                          </p>
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                            {saved.admin_feedback}
-                          </p>
-                        </div>
-                      )}
-
-                      {saved?.submitted_at && (
-                        <p className="text-xs text-muted-foreground">
-                          Last submitted:{" "}
-                          {new Date(saved.submitted_at).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                  </section>
-                );
-              })}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Remove ${file.name}`}
+                              onClick={() => removeFile(index)}
+                            >
+                              <X size={16} />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
 
               <section className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                 <div>
-                  <h2 className="font-bold">
-                    Ready to submit your tasks?
-                  </h2>
+                  <h2 className="font-bold">Ready to submit your tasks?</h2>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     Check your links and attachments before submitting.
-                    Resubmission sends the tasks for review again.
+                    All required fields must be completed.
                   </p>
                 </div>
 
@@ -928,14 +879,10 @@ export default function InternPortalPage() {
             </form>
 
             <section className="mt-8 rounded-2xl border border-border bg-card p-5 sm:p-6">
-              <div>
-                <h2 className="text-xl font-bold">
-                  Published Internship Tasks
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Additional instructions published by your internship team.
-                </p>
-              </div>
+              <h2 className="text-xl font-bold">Published Internship Tasks</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Additional instructions published by your internship team.
+              </p>
 
               {publishedTasks.length === 0 ? (
                 <p className="mt-5 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">
@@ -953,17 +900,14 @@ export default function InternPortalPage() {
                           task.task_title ||
                           `Published Task ${index + 1}`}
                       </h3>
-
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
                         {task.description || task.instructions || ""}
                       </p>
-
                       {(task.due_date || task.deadline) && (
                         <p className="mt-2 text-xs text-muted-foreground">
                           Deadline: {task.due_date || task.deadline}
                         </p>
                       )}
-
                       {task.task_link && (
                         <a
                           href={task.task_link}
@@ -984,7 +928,7 @@ export default function InternPortalPage() {
             <section className="mt-8 rounded-2xl border border-border bg-card p-5 sm:p-6">
               <h2 className="text-xl font-bold">My Task Submissions</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Review the latest status and feedback for each submitted task.
+                Review the latest status and feedback for your submissions.
               </p>
 
               {submissions.length === 0 ? (
@@ -993,125 +937,105 @@ export default function InternPortalPage() {
                 </p>
               ) : (
                 <div className="mt-5 grid gap-3">
-                  {submissions.map((item) => {
-                    const definition = TASK_DEFINITIONS.find(
-                      (task) =>
-                        task.number === Number(item.task_number)
-                    );
-
-                    return (
-                      <article
-                        key={item.id || item.task_number}
-                        className="rounded-xl border border-border p-4"
-                      >
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div className="min-w-0">
-                            <h3 className="font-bold">
-                              {definition?.title ||
-                                item.task_title ||
-                                `Task ${item.task_number}`}
-                            </h3>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Submitted:{" "}
-                              {item.submitted_at
-                                ? new Date(
-                                    item.submitted_at
-                                  ).toLocaleString()
-                                : "Date unavailable"}
-                            </p>
-                          </div>
-
-                          <span
-                            className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(item.status)}`}
-                          >
-                            {item.status || "Under Review"}
-                          </span>
-                        </div>
-
-                        {item.description && (
-                          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                            {item.description}
+                  {submissions.map((item) => (
+                    <article
+                      key={item.id || item.task_number}
+                      className="rounded-xl border border-border p-4"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <h3 className="font-bold">
+                            {TASK_TITLES[Number(item.task_number) - 1] ||
+                              item.task_title ||
+                              `Task ${item.task_number}`}
+                          </h3>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Submitted:{" "}
+                            {item.submitted_at
+                              ? new Date(item.submitted_at).toLocaleString()
+                              : "Date unavailable"}
                           </p>
-                        )}
-
-                        <div className="mt-3 flex flex-wrap gap-3">
-                          {item.task_link && (
-                            <a
-                              href={normalizeUrl(item.task_link)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                            >
-                              Open Task Link
-                              <ExternalLink size={14} />
-                            </a>
-                          )}
-
-                          {item.github_link && (
-                            <a
-                              href={normalizeUrl(item.github_link)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                            >
-                              GitHub Repository
-                              <ExternalLink size={14} />
-                            </a>
-                          )}
-
-                          {item.linkedin_link && (
-                            <a
-                              href={normalizeUrl(item.linkedin_link)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                            >
-                              LinkedIn Post
-                              <ExternalLink size={14} />
-                            </a>
-                          )}
                         </div>
+                        <span
+                          className={`inline-flex w-fit shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${statusStyle(item.status)}`}
+                        >
+                          {item.status || "Under Review"}
+                        </span>
+                      </div>
 
-                        {Array.isArray(item.files) &&
-                          item.files.length > 0 && (
-                            <div className="mt-4 border-t border-border pt-3">
-                              <p className="text-xs font-semibold text-muted-foreground">
-                                Attached Files
-                              </p>
+                      {item.description && (
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                          {item.description}
+                        </p>
+                      )}
 
-                              <div className="mt-2 grid gap-2">
-                                {item.files.map((file, index) => (
-                                  <div
-                                    key={`${file.name}-${index}`}
-                                    className="flex items-start gap-2 text-sm"
-                                  >
-                                    <FileText
-                                      size={15}
-                                      className="mt-0.5 shrink-0 text-primary"
-                                    />
-                                    <span className="break-all">
-                                      {file.name}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                        {item.admin_feedback && (
-                          <div className="mt-4 rounded-lg bg-secondary p-3">
-                            <p className="text-sm font-semibold">
-                              Reviewer Feedback
-                            </p>
-                            <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
-                              {item.admin_feedback}
-                            </p>
-                          </div>
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        {item.task_link && (
+                          <a
+                            href={normalizeUrl(item.task_link)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                          >
+                            Open Link <ExternalLink size={14} />
+                          </a>
                         )}
-                      </article>
-                    );
-                  })}
+                        {item.github_link && (
+                          <a
+                            href={normalizeUrl(item.github_link)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                          >
+                            GitHub Repository <ExternalLink size={14} />
+                          </a>
+                        )}
+                        {item.linkedin_link && (
+                          <a
+                            href={normalizeUrl(item.linkedin_link)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                          >
+                            LinkedIn Post <ExternalLink size={14} />
+                          </a>
+                        )}
+                      </div>
+
+                      {Array.isArray(item.files) && item.files.length > 0 && (
+                        <div className="mt-4 border-t border-border pt-3">
+                          <p className="text-xs font-semibold text-muted-foreground">
+                            Attached Files
+                          </p>
+                          <div className="mt-2 grid gap-2">
+                            {item.files.map((file, index) => (
+                              <div
+                                key={`${file.name}-${index}`}
+                                className="flex items-start gap-2 text-sm"
+                              >
+                                <FileText
+                                  size={15}
+                                  className="mt-0.5 shrink-0 text-primary"
+                                />
+                                <span className="break-all">{file.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {item.admin_feedback && (
+                        <div className="mt-4 rounded-lg bg-secondary p-3">
+                          <p className="text-sm font-semibold">
+                            Reviewer Feedback
+                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                            {item.admin_feedback}
+                          </p>
+                        </div>
+                      )}
+                    </article>
+                  ))}
                 </div>
               )}
             </section>
