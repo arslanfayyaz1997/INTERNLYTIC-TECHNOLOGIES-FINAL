@@ -43,8 +43,6 @@ const TASK_DEFINITIONS = [
       "Describe your project, upload your work, and provide your GitHub repository and LinkedIn project post.",
     requiredFinal: true,
   },
-  linkPlaceholder: "https://www.figma.com/...",
-    allowLinkOrFiles: true,
 ];
 
 const ACCEPTED_EXTENSIONS = [
