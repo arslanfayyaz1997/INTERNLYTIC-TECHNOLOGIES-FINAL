@@ -29,7 +29,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const TASK_DEFINITIONS = [
   {
     number: 1,
-    title: "LinkedIn Offer Letter Post",
+    title: "Week 1 Task (LinkedIn Offer Letter Post link) ",
     description:
       "Share the URL of your LinkedIn post announcing your internship offer letter.",
     linkLabel: "LinkedIn Post URL",
@@ -38,14 +38,14 @@ const TASK_DEFINITIONS = [
   },
   {
     number: 2,
-    title: "Weekly Task 1",
+    title: "Week 2 Task",
     description:
       "Upload your completed weekly task. You may submit documents, screenshots, presentations, or ZIP files.",
     requiredFiles: true,
   },
   {
     number: 3,
-    title: "Project Submission",
+    title: "Week 3 Task",
     description:
       "Submit your project work, supporting documents, screenshots, or design deliverables. A shareable Figma or project URL is also accepted.",
     linkLabel: "Project or Figma URL",
@@ -54,7 +54,7 @@ const TASK_DEFINITIONS = [
   },
   {
     number: 4,
-    title: "Final Project Submission",
+    title: " Week Task 4 (Final Project Submission)",
     description:
       "This task is compulsory. Describe your project, upload your work, and provide your GitHub repository and LinkedIn project post.",
     requiredFinal: true,
