@@ -61,14 +61,12 @@ function safeUrl(value) {
   }
 }
 
-/* Sort IDs numerically while preserving their original text. */
 function compareInternIds(a, b) {
   const getId = (item) =>
     String(item?.intern_id ?? item?.certificate_id ?? "").trim();
 
   const idA = getId(a);
   const idB = getId(b);
-
   const matchA = idA.match(/\d+/);
   const matchB = idB.match(/\d+/);
 
@@ -182,6 +180,7 @@ export default function AdminDashboardPage() {
       if (rpcError) throw rpcError;
 
       const payload = getResult(data);
+
       if (payload?.ok === false) {
         throw new Error(payload.message || "Could not load messages.");
       }
@@ -225,13 +224,13 @@ export default function AdminDashboardPage() {
       if (overviewError) throw overviewError;
 
       const payload = getResult(data);
+
       if (!payload?.ok) {
         throw new Error(
           payload?.message || "Admin authorization failed. Sign in again."
         );
       }
 
-      /* Keep existing intern records and sorting unchanged. */
       setRows([...(payload.interns || [])].sort(compareInternIds));
 
       const enrichedTasks = await Promise.all(
@@ -261,8 +260,30 @@ export default function AdminDashboardPage() {
 
       setTasks(enrichedTasks);
 
-      // Only deletion-history entries are displayed in Deleted Tasks.
-      setDeletedTasks(payload.deleted_tasks || []);
+      // Fetch minimal deletion history from the secure RPC.
+      const {
+        data: deletedData,
+        error: deletedError,
+      } = await supabase.rpc("portal_admin_get_deleted_tasks", {
+        p_email: s.email || "arslanfayyaz1997@gmail.com",
+        p_pin: s.pin,
+      });
+
+      if (deletedError) throw deletedError;
+
+      const deletedResult = getResult(deletedData);
+
+      if (deletedResult?.ok === false) {
+        throw new Error(
+          deletedResult.message || "Could not load deleted task history."
+        );
+      }
+
+      setDeletedTasks(
+        Array.isArray(deletedResult)
+          ? deletedResult
+          : deletedResult?.deleted_tasks || []
+      );
     } catch (e) {
       setError(e.message || "Unable to load dashboard.");
     } finally {
@@ -326,8 +347,7 @@ export default function AdminDashboardPage() {
         groups.set(identity, {
           key: identity,
           intern_id: task.intern_id || task.certificate_id || "",
-          intern_name:
-            task.intern_name || task.student_name || "Intern",
+          intern_name: task.intern_name || task.student_name || "Intern",
           email: task.student_email || task.email || "",
           tasks: [],
         });
@@ -335,7 +355,10 @@ export default function AdminDashboardPage() {
 
       const group = groups.get(identity);
       group.tasks.push(task);
-      if (!group.email) group.email = task.student_email || task.email || "";
+
+      if (!group.email) {
+        group.email = task.student_email || task.email || "";
+      }
     });
 
     return [...groups.values()].map((group) => ({
@@ -423,6 +446,7 @@ export default function AdminDashboardPage() {
       if (rpcError) throw rpcError;
 
       const result = getResult(data);
+
       if (!result?.ok) {
         throw new Error(result?.message || "Could not update task.");
       }
@@ -442,7 +466,8 @@ export default function AdminDashboardPage() {
     }
   }
 
-  // Permanently delete the approved task through the secure Supabase RPC.
+  // Permanently delete the approved task submission.
+  // The SQL RPC stores only minimal deletion history.
   async function deleteTask(task) {
     const taskId = String(task.id || "");
 
@@ -457,9 +482,9 @@ export default function AdminDashboardPage() {
     }
 
     const confirmed = window.confirm(
-      `Permanently delete "${task.task_title || "this task"}" for ${
-        task.intern_name || task.intern_id || "this intern"
-      }? The task submission will be removed from the database. A minimal history entry will remain in Deleted Tasks.`
+      `Permanently delete this approved task submission for ${
+        task.intern_name || task.student_name || task.intern_id || "this intern"
+      }? Only a minimal deletion record will remain in Deleted Tasks.`
     );
 
     if (!confirmed) return;
@@ -474,7 +499,7 @@ export default function AdminDashboardPage() {
         {
           p_email: session.email || "arslanfayyaz1997@gmail.com",
           p_pin: session.pin,
-          p_task_id: task.id,
+          p_task_id: taskId,
         }
       );
 
@@ -486,12 +511,62 @@ export default function AdminDashboardPage() {
         throw new Error(result?.message || "Could not delete task.");
       }
 
-      setNotice("Task deleted. Its deletion record is available in Deleted Tasks.");
+      setNotice("Task submission permanently deleted.");
       await load();
     } catch (e) {
       setError(
-        `${e.message || "Could not delete task."} Check that the portal_delete_task SQL function is installed in Supabase.`
+        `${e.message || "Could not delete task."} Check that the task deletion SQL has been installed in Supabase.`
       );
+    } finally {
+      setDeletingTask("");
+    }
+  }
+
+  async function permanentlyDeleteTaskHistory(task) {
+    const historyId = String(task.id || "");
+
+    if (!historyId || !session?.pin) {
+      setError("Deletion record ID or CEO session is missing.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Permanently remove this deletion record from the database? It will no longer appear in Deleted Tasks."
+    );
+
+    if (!confirmed) return;
+
+    setDeletingTask(`history-${historyId}`);
+    setError("");
+    setNotice("");
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc(
+        "portal_admin_purge_deleted_task",
+        {
+          p_email: session.email || "arslanfayyaz1997@gmail.com",
+          p_pin: session.pin,
+          p_history_id: historyId,
+        }
+      );
+
+      if (rpcError) throw rpcError;
+
+      const result = getResult(data);
+
+      if (!result?.ok) {
+        throw new Error(
+          result?.message || "Could not permanently delete this record."
+        );
+      }
+
+      setDeletedTasks((previous) =>
+        previous.filter((item) => String(item.id) !== historyId)
+      );
+
+      setNotice("Deletion record permanently removed from the database.");
+    } catch (e) {
+      setError(e.message || "Could not permanently delete the history record.");
     } finally {
       setDeletingTask("");
     }
@@ -539,6 +614,7 @@ export default function AdminDashboardPage() {
       if (rpcError) throw rpcError;
 
       const result = getResult(data);
+
       if (result?.ok === false) {
         throw new Error(result.message || "Could not save reply.");
       }
@@ -556,6 +632,7 @@ export default function AdminDashboardPage() {
     }
   }
 
+  // Existing message deletion system is unchanged.
   async function deleteComment(comment) {
     const commentId = String(comment.id || "");
 
@@ -567,6 +644,7 @@ export default function AdminDashboardPage() {
     const confirmed = window.confirm(
       "Delete only this message? This action cannot be undone."
     );
+
     if (!confirmed) return;
 
     if (!session?.pin) {
@@ -591,6 +669,7 @@ export default function AdminDashboardPage() {
       if (rpcError) throw rpcError;
 
       const result = getResult(data);
+
       if (result?.ok === false) {
         throw new Error(result.message || "Could not delete message.");
       }
@@ -598,6 +677,7 @@ export default function AdminDashboardPage() {
       setCeoComments((previous) =>
         previous.filter((item) => String(item.id) !== commentId)
       );
+
       setNotice("Message deleted.");
     } catch (e) {
       setError(
@@ -618,7 +698,6 @@ export default function AdminDashboardPage() {
       task.intern_name,
       task.intern_id,
       task.student_email,
-      task.task_title,
     ]
       .filter(Boolean)
       .join(" ")
@@ -714,6 +793,7 @@ export default function AdminDashboardPage() {
                 onChange={(e) => setQuery(e.target.value)}
               />
             </div>
+
             <select
               className="rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={track}
@@ -750,7 +830,9 @@ export default function AdminDashboardPage() {
                       className="border-b border-border/70 last:border-0"
                     >
                       <td className="p-3">
-                        <strong>{r.full_name || r.student_name || "Intern"}</strong>
+                        <strong>
+                          {r.full_name || r.student_name || "Intern"}
+                        </strong>
                         <div className="break-all text-xs text-muted-foreground">
                           {r.email || r.student_email || "Email unavailable"}
                         </div>
@@ -836,14 +918,19 @@ export default function AdminDashboardPage() {
                           {group.intern_name}
                         </span>
                         <span className="mt-1 block break-all text-xs text-muted-foreground">
-                          {String(group.intern_id || "No ID")} · {group.email || "No email"}
+                          {String(group.intern_id || "No ID")} ·{" "}
+                          {group.email || "No email"}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
                           {group.tasks.length} matching task
                           {group.tasks.length === 1 ? "" : "s"}
                         </span>
                       </span>
-                      {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      {expanded ? (
+                        <ChevronUp size={18} />
+                      ) : (
+                        <ChevronDown size={18} />
+                      )}
                     </button>
 
                     {expanded && (
@@ -859,7 +946,8 @@ export default function AdminDashboardPage() {
                                   Task {t.task_number || index + 1}
                                 </p>
                                 <h3 className="mt-1 break-words font-bold">
-                                  {t.task_title || `Task ${t.task_number || index + 1}`}
+                                  {t.task_title ||
+                                    `Task ${t.task_number || index + 1}`}
                                 </h3>
                               </div>
                               <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold">
@@ -906,7 +994,8 @@ export default function AdminDashboardPage() {
                             </div>
 
                             <div className="mt-3 text-xs text-muted-foreground">
-                              Submitted: {displayDate(t.submitted_at || t.created_at)}
+                              Submitted:{" "}
+                              {displayDate(t.submitted_at || t.created_at)}
                               {t.reviewed_at
                                 ? ` · Reviewed: ${displayDate(t.reviewed_at)}`
                                 : ""}
@@ -914,7 +1003,9 @@ export default function AdminDashboardPage() {
 
                             {t.admin_feedback && (
                               <div className="mt-3 rounded-xl bg-secondary/70 p-3">
-                                <p className="text-xs font-bold">Previous admin feedback</p>
+                                <p className="text-xs font-bold">
+                                  Previous admin feedback
+                                </p>
                                 <p className="mt-1 whitespace-pre-wrap break-words text-sm">
                                   {t.admin_feedback}
                                 </p>
@@ -949,13 +1040,17 @@ export default function AdminDashboardPage() {
                                     onClick={() => review(t.id, "Approved")}
                                   >
                                     <CheckCircle2 size={15} className="mr-1" />
-                                    {savingTask === String(t.id) ? "Saving…" : "Approve task"}
+                                    {savingTask === String(t.id)
+                                      ? "Saving…"
+                                      : "Approve task"}
                                   </Button>
                                   <Button
                                     size="sm"
                                     variant="outline"
                                     disabled={savingTask === String(t.id)}
-                                    onClick={() => review(t.id, "Needs Changes")}
+                                    onClick={() =>
+                                      review(t.id, "Needs Changes")
+                                    }
                                   >
                                     <XCircle size={15} className="mr-1" />
                                     Request changes
@@ -964,7 +1059,6 @@ export default function AdminDashboardPage() {
                               </div>
                             )}
 
-                            {/* Delete button only for approved tasks, like Delete message. */}
                             {normalStatus(t.status) === "Approved" && (
                               <div className="mt-4 border-t border-border pt-4">
                                 <Button
@@ -991,14 +1085,15 @@ export default function AdminDashboardPage() {
           )}
         </section>
 
-        {/* Deletion history only; original task submissions are deleted from Supabase. */}
+        {/* Minimal history only: no task title, number, or task content. */}
         <section className="mt-8 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div className="flex items-center gap-2">
             <Trash2 size={20} />
             <h2 className="text-xl font-bold">Deleted Tasks</h2>
           </div>
+
           <p className="mt-1 text-sm text-muted-foreground">
-            This section keeps only the record of deleted tasks, not the original submissions.
+            Only intern identity and the status before deletion are retained.
           </p>
 
           {loading ? (
@@ -1007,38 +1102,57 @@ export default function AdminDashboardPage() {
             </p>
           ) : filteredDeletedTasks.length === 0 ? (
             <p className="py-6 text-sm text-muted-foreground">
-              No deleted tasks found.
+              No deleted task records found.
             </p>
           ) : (
-            <div className="mt-4 grid gap-3">
-              {filteredDeletedTasks.map((task, index) => (
-                <article
-                  key={task.id || `${task.original_task_id}-${index}`}
-                  className="min-w-0 rounded-xl border border-border p-4"
+            <div className="mt-4 divide-y divide-border">
+              {filteredDeletedTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <h3 className="break-words font-semibold">
-                    {task.task_title || "Task submission"}
-                  </h3>
-                  <p className="mt-1 break-words text-sm text-muted-foreground">
-                    Intern: {task.intern_name || "Name unavailable"}
-                  </p>
-                  <p className="break-all text-xs text-muted-foreground">
-                    Intern ID: {task.intern_id || "—"}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Deleted: {displayDate(task.deleted_at)}
-                  </p>
-                  {task.status_before_delete && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Status before deletion: {task.status_before_delete}
+                  <div className="min-w-0">
+                    <p className="break-words font-semibold">
+                      {task.intern_name || "Name unavailable"}
                     </p>
-                  )}
-                </article>
+                    <p className="mt-1 break-all text-sm text-muted-foreground">
+                      {task.student_email || "Email unavailable"}
+                    </p>
+                    <p className="mt-1 break-all text-xs text-muted-foreground">
+                      Intern ID: {task.intern_id || "—"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Status before delete:{" "}
+                      {task.status_before_delete || "—"}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 flex-col items-start gap-2 sm:items-end">
+                    <p className="text-xs text-muted-foreground">
+                      Deleted: {displayDate(task.deleted_at)}
+                    </p>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        deletingTask === `history-${String(task.id)}`
+                      }
+                      onClick={() => permanentlyDeleteTaskHistory(task)}
+                    >
+                      <Trash2 size={15} className="mr-2" />
+                      {deletingTask === `history-${String(task.id)}`
+                        ? "Deleting…"
+                        : "Delete permanently"}
+                    </Button>
+                  </div>
+                </div>
               ))}
             </div>
           )}
         </section>
 
+        {/* Existing intern messages and CEO replies section kept intact. */}
         <section className="mt-8 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1064,7 +1178,9 @@ export default function AdminDashboardPage() {
           </div>
 
           {loadingComments ? (
-            <p className="py-6 text-sm text-muted-foreground">Loading messages…</p>
+            <p className="py-6 text-sm text-muted-foreground">
+              Loading messages…
+            </p>
           ) : ceoComments.length === 0 ? (
             <p className="py-6 text-sm text-muted-foreground">
               No messages available yet.
@@ -1073,13 +1189,17 @@ export default function AdminDashboardPage() {
             <div className="mt-4 grid gap-4">
               {ceoComments.map((comment) => {
                 const commentId = String(comment.id || "");
-                const recipient = comment.student_email || comment.email || "";
+                const recipient =
+                  comment.student_email || comment.email || "";
                 const isCeo =
                   String(comment.sender_role || "").toLowerCase() === "ceo";
 
                 return (
                   <article
-                    key={commentId || `${comment.intern_id}-${comment.created_at}`}
+                    key={
+                      commentId ||
+                      `${comment.intern_id}-${comment.created_at}`
+                    }
                     className="min-w-0 rounded-xl border border-border p-4"
                   >
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -1087,10 +1207,17 @@ export default function AdminDashboardPage() {
                         <p className="break-words font-semibold">
                           {isCeo
                             ? "CEO | Arslan Fayyaz | Internlytic Technologies"
-                            : comment.intern_name || comment.student_name || "Intern"}
+                            : comment.intern_name ||
+                              comment.student_name ||
+                              "Intern"}
                         </p>
                         <p className="mt-1 break-all text-xs text-muted-foreground">
-                          ID: {String(comment.intern_id || comment.certificate_id || "—")}
+                          ID:{" "}
+                          {String(
+                            comment.intern_id ||
+                              comment.certificate_id ||
+                              "—"
+                          )}
                         </p>
                         <p className="break-all text-xs text-muted-foreground">
                           {recipient || "Email unavailable"}
@@ -1121,6 +1248,7 @@ export default function AdminDashboardPage() {
                           {replyOpen[commentId] ? "Close reply" : "Reply"}
                         </Button>
                       )}
+
                       <Button
                         size="sm"
                         variant="outline"
@@ -1128,7 +1256,9 @@ export default function AdminDashboardPage() {
                         onClick={() => deleteComment(comment)}
                       >
                         <Trash2 size={15} className="mr-2" />
-                        {deletingComment === commentId ? "Deleting…" : "Delete message"}
+                        {deletingComment === commentId
+                          ? "Deleting…"
+                          : "Delete message"}
                       </Button>
                     </div>
 
@@ -1152,7 +1282,9 @@ export default function AdminDashboardPage() {
                             onClick={() => sendReply(comment)}
                           >
                             <Send size={15} className="mr-2" />
-                            {sendingReply === commentId ? "Sending…" : "Send portal reply"}
+                            {sendingReply === commentId
+                              ? "Sending…"
+                              : "Send portal reply"}
                           </Button>
                           <Button
                             size="sm"
@@ -1179,7 +1311,7 @@ export default function AdminDashboardPage() {
 
         <p className="mt-6 text-xs text-muted-foreground">
           Existing intern and certificate records are preserved. Task deletion
-          requires the secure portal_delete_task Supabase function.
+          and deletion-history removal require the secure Supabase RPC functions.
         </p>
       </main>
 
