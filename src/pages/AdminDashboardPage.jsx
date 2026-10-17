@@ -61,7 +61,7 @@ function safeUrl(value) {
   }
 }
 
-/* FIX: Sort IDs numerically while preserving their original text. */
+/* Sort IDs numerically while preserving their original text. */
 function compareInternIds(a, b) {
   const getId = (item) =>
     String(item?.intern_id ?? item?.certificate_id ?? "").trim();
@@ -146,6 +146,7 @@ export default function AdminDashboardPage() {
   const [session, setSession] = useState(() => readSession());
   const [rows, setRows] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [deletedTasks, setDeletedTasks] = useState([]);
   const [ceoComments, setCeoComments] = useState([]);
   const [feedbackDrafts, setFeedbackDrafts] = useState({});
   const [replyDrafts, setReplyDrafts] = useState({});
@@ -156,6 +157,7 @@ export default function AdminDashboardPage() {
   const [status, setStatus] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
   const [savingTask, setSavingTask] = useState("");
+  const [deletingTask, setDeletingTask] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
   const [sendingReply, setSendingReply] = useState("");
   const [deletingComment, setDeletingComment] = useState("");
@@ -229,7 +231,7 @@ export default function AdminDashboardPage() {
         );
       }
 
-      /* FIX: Sort the existing records only; do not modify their IDs. */
+      /* Keep existing intern records and sorting unchanged. */
       setRows([...(payload.interns || [])].sort(compareInternIds));
 
       const enrichedTasks = await Promise.all(
@@ -258,6 +260,9 @@ export default function AdminDashboardPage() {
       );
 
       setTasks(enrichedTasks);
+
+      // Only deletion-history entries are displayed in Deleted Tasks.
+      setDeletedTasks(payload.deleted_tasks || []);
     } catch (e) {
       setError(e.message || "Unable to load dashboard.");
     } finally {
@@ -376,9 +381,11 @@ export default function AdminDashboardPage() {
   const pendingCount = tasks.filter(
     (task) => normalStatus(task.status) === "Pending"
   ).length;
+
   const approvedCount = tasks.filter(
     (task) => normalStatus(task.status) === "Approved"
   ).length;
+
   const changesCount = tasks.filter(
     (task) => normalStatus(task.status) === "Needs Changes"
   ).length;
@@ -432,6 +439,61 @@ export default function AdminDashboardPage() {
       setError(e.message || "Could not review task.");
     } finally {
       setSavingTask("");
+    }
+  }
+
+  // Permanently delete the approved task through the secure Supabase RPC.
+  async function deleteTask(task) {
+    const taskId = String(task.id || "");
+
+    if (!taskId || !session?.pin) {
+      setError("Task ID or CEO session is missing. Please refresh and try again.");
+      return;
+    }
+
+    if (normalStatus(task.status) !== "Approved") {
+      setError("Only approved tasks can be deleted from this dashboard.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Permanently delete "${task.task_title || "this task"}" for ${
+        task.intern_name || task.intern_id || "this intern"
+      }? The task submission will be removed from the database. A minimal history entry will remain in Deleted Tasks.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingTask(taskId);
+    setError("");
+    setNotice("");
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc(
+        "portal_delete_task",
+        {
+          p_email: session.email || "arslanfayyaz1997@gmail.com",
+          p_pin: session.pin,
+          p_task_id: task.id,
+        }
+      );
+
+      if (rpcError) throw rpcError;
+
+      const result = getResult(data);
+
+      if (!result?.ok) {
+        throw new Error(result?.message || "Could not delete task.");
+      }
+
+      setNotice("Task deleted. Its deletion record is available in Deleted Tasks.");
+      await load();
+    } catch (e) {
+      setError(
+        `${e.message || "Could not delete task."} Check that the portal_delete_task SQL function is installed in Supabase.`
+      );
+    } finally {
+      setDeletingTask("");
     }
   }
 
@@ -550,6 +612,20 @@ export default function AdminDashboardPage() {
     sessionStorage.removeItem("internlytic.portal.session");
     navigate("/login", { replace: true });
   }
+
+  const filteredDeletedTasks = deletedTasks.filter((task) => {
+    const searchable = [
+      task.intern_name,
+      task.intern_id,
+      task.student_email,
+      task.task_title,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return searchable.includes(query.trim().toLowerCase());
+  });
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -887,6 +963,23 @@ export default function AdminDashboardPage() {
                                 </div>
                               </div>
                             )}
+
+                            {/* Delete button only for approved tasks, like Delete message. */}
+                            {normalStatus(t.status) === "Approved" && (
+                              <div className="mt-4 border-t border-border pt-4">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={deletingTask === String(t.id)}
+                                  onClick={() => deleteTask(t)}
+                                >
+                                  <Trash2 size={15} className="mr-2" />
+                                  {deletingTask === String(t.id)
+                                    ? "Deleting…"
+                                    : "Delete task"}
+                                </Button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -898,12 +991,60 @@ export default function AdminDashboardPage() {
           )}
         </section>
 
+        {/* Deletion history only; original task submissions are deleted from Supabase. */}
+        <section className="mt-8 rounded-2xl border border-border bg-card p-4 sm:p-6">
+          <div className="flex items-center gap-2">
+            <Trash2 size={20} />
+            <h2 className="text-xl font-bold">Deleted Tasks</h2>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            This section keeps only the record of deleted tasks, not the original submissions.
+          </p>
+
+          {loading ? (
+            <p className="py-6 text-sm text-muted-foreground">
+              Loading deletion history…
+            </p>
+          ) : filteredDeletedTasks.length === 0 ? (
+            <p className="py-6 text-sm text-muted-foreground">
+              No deleted tasks found.
+            </p>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              {filteredDeletedTasks.map((task, index) => (
+                <article
+                  key={task.id || `${task.original_task_id}-${index}`}
+                  className="min-w-0 rounded-xl border border-border p-4"
+                >
+                  <h3 className="break-words font-semibold">
+                    {task.task_title || "Task submission"}
+                  </h3>
+                  <p className="mt-1 break-words text-sm text-muted-foreground">
+                    Intern: {task.intern_name || "Name unavailable"}
+                  </p>
+                  <p className="break-all text-xs text-muted-foreground">
+                    Intern ID: {task.intern_id || "—"}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Deleted: {displayDate(task.deleted_at)}
+                  </p>
+                  {task.status_before_delete && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Status before deletion: {task.status_before_delete}
+                    </p>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="mt-8 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="flex items-center gap-2 text-xl font-bold">
                 <MessageSquare size={20} />
-                Interns Reviews for CEO
+                Intern messages & Replies by CEO
               </h2>
               <p className="text-sm text-muted-foreground">
                 Intern comments and CEO replies in the portal conversation.
@@ -944,8 +1085,9 @@ export default function AdminDashboardPage() {
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                       <div className="min-w-0">
                         <p className="break-words font-semibold">
-                          {comment.intern_name || comment.student_name || "Intern"}
-                          {isCeo ? " · CEO" : " · Intern"}
+                          {isCeo
+                            ? "CEO | Arslan Fayyaz | Internlytic Technologies"
+                            : comment.intern_name || comment.student_name || "Intern"}
                         </p>
                         <p className="mt-1 break-all text-xs text-muted-foreground">
                           ID: {String(comment.intern_id || comment.certificate_id || "—")}
@@ -1036,9 +1178,8 @@ export default function AdminDashboardPage() {
         </section>
 
         <p className="mt-6 text-xs text-muted-foreground">
-          Existing intern and certificate records are preserved. Task resubmission
-          and message management still require the corresponding secure Supabase
-          functions to be installed and connected.
+          Existing intern and certificate records are preserved. Task deletion
+          requires the secure portal_delete_task Supabase function.
         </p>
       </main>
 
