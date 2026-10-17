@@ -61,6 +61,27 @@ function safeUrl(value) {
   }
 }
 
+/* FIX: Sort IDs numerically while preserving their original text. */
+function compareInternIds(a, b) {
+  const getId = (item) =>
+    String(item?.intern_id ?? item?.certificate_id ?? "").trim();
+
+  const idA = getId(a);
+  const idB = getId(b);
+
+  const matchA = idA.match(/\d+/);
+  const matchB = idB.match(/\d+/);
+
+  if (matchA && matchB) {
+    const numberA = Number(matchA[0]);
+    const numberB = Number(matchB[0]);
+
+    if (numberA !== numberB) return numberA - numberB;
+  }
+
+  return idA.localeCompare(idB);
+}
+
 function normalStatus(value) {
   const status = String(value || "Pending").trim().toLowerCase();
 
@@ -208,7 +229,8 @@ export default function AdminDashboardPage() {
         );
       }
 
-      setRows([...(payload.interns || [])]);
+      /* FIX: Sort the existing records only; do not modify their IDs. */
+      setRows([...(payload.interns || [])].sort(compareInternIds));
 
       const enrichedTasks = await Promise.all(
         (payload.tasks || []).map(async (task) => {
@@ -658,7 +680,7 @@ export default function AdminDashboardPage() {
                         </div>
                       </td>
                       <td className="p-3">
-                        {r.intern_id || r.certificate_id || "—"}
+                        {String(r.intern_id ?? r.certificate_id ?? "—")}
                       </td>
                       <td className="p-3">{r.track || r.program || "—"}</td>
                       <td className="p-3">{r.offer_letter_status || "—"}</td>
@@ -738,7 +760,7 @@ export default function AdminDashboardPage() {
                           {group.intern_name}
                         </span>
                         <span className="mt-1 block break-all text-xs text-muted-foreground">
-                          {group.intern_id || "No ID"} · {group.email || "No email"}
+                          {String(group.intern_id || "No ID")} · {group.email || "No email"}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
                           {group.tasks.length} matching task
@@ -911,7 +933,8 @@ export default function AdminDashboardPage() {
               {ceoComments.map((comment) => {
                 const commentId = String(comment.id || "");
                 const recipient = comment.student_email || comment.email || "";
-                const isCeo = String(comment.sender_role || "").toLowerCase() === "ceo";
+                const isCeo =
+                  String(comment.sender_role || "").toLowerCase() === "ceo";
 
                 return (
                   <article
@@ -925,7 +948,7 @@ export default function AdminDashboardPage() {
                           {isCeo ? " · CEO" : " · Intern"}
                         </p>
                         <p className="mt-1 break-all text-xs text-muted-foreground">
-                          ID: {comment.intern_id || comment.certificate_id || "—"}
+                          ID: {String(comment.intern_id || comment.certificate_id || "—")}
                         </p>
                         <p className="break-all text-xs text-muted-foreground">
                           {recipient || "Email unavailable"}
