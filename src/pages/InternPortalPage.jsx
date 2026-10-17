@@ -1280,7 +1280,7 @@ export default function InternPortalPage() {
                       return (
                         <article key={comment.id || `${comment.created_at}-${index}`} className={`min-w-0 rounded-xl border p-4 ${isCeo ? "border-primary/30 bg-secondary/40" : "border-border bg-card"}`}>
                           <div className="flex flex-wrap items-start justify-between gap-2">
-                            <p className="font-bold">{isCeo ? "Internlytic CEO" : "You (Intern)"}</p>
+                            <p className="font-bold">{isCeo ? "CEO | Arslan Fayyaz | Internlytic Technologies" : "You (Intern)"}</p>
                             {comment.created_at && (
                               <p className="text-xs text-muted-foreground">
                                 {new Date(comment.created_at).toLocaleString()}
