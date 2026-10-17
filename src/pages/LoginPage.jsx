@@ -217,7 +217,7 @@ export default function LoginPage() {
                 id="intern-id"
                 value={internId}
                 onChange={(e) => setInternId(e.target.value)}
-                placeholder="e.g. INT-2026-000001"
+                placeholder="e.g. INT-2026-******"
                 autoComplete="username"
                 required
               />
@@ -230,7 +230,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter the Gmail saved in your application"
+                placeholder="Enter Your Registered Email"
                 autoComplete="email"
                 required
               />
